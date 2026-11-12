@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
-import { getChildren } from '../api/children'
+import { getProfiles } from '../api/children'
+import { useAuth } from './AuthContext'
 import { useAsync } from '../hooks/useAsync'
 import { useDataVersion } from '../hooks/useDataVersion'
 import { readJSON, writeJSON } from '../utils/storage'
@@ -7,14 +8,23 @@ import { readJSON, writeJSON } from '../utils/storage'
 const ChildContext = createContext(null)
 const STORAGE_KEY = 'enfantil:selectedChild'
 
-/** The child being viewed. Saved to localStorage so it survives reloads; every page reads it. */
+/**
+ * The profile being viewed: the mother herself ("me") or one of her children.
+ * Saved to localStorage so it survives reloads; every page reads it.
+ * A pregnant mother starts on "Me"; otherwise on her first child.
+ */
 export function ChildProvider({ children }) {
+  const { user } = useAuth()
   const version = useDataVersion()
-  const { data, error, reload } = useAsync(getChildren, [], version)
+  const { data, error, reload } = useAsync(getProfiles, [user?.id], version)
   const [selectedId, setSelectedId] = useState(() => readJSON(STORAGE_KEY))
 
-  const childList = useMemo(() => data ?? [], [data])
-  const selectedChild = childList.find((c) => c.id === selectedId) ?? childList[0] ?? null
+  const childList = useMemo(() => data?.children ?? [], [data])
+  const me = data?.me ?? null
+  const fallback = me?.statusKind === 'pregnant' || !childList.length ? 'me' : childList[0].id
+  const validId = selectedId === 'me' || childList.some((c) => c.id === selectedId) ? selectedId : fallback
+  const isMe = Boolean(data) && validId === 'me'
+  const selectedChild = isMe ? null : (childList.find((c) => c.id === validId) ?? null)
 
   const selectChild = useCallback((id) => {
     setSelectedId(id)
@@ -23,14 +33,18 @@ export function ChildProvider({ children }) {
 
   const value = useMemo(
     () => ({
+      me,
+      isMe,
       childList,
+      profiles: me ? [me, ...childList] : childList,
       selectedChild,
+      selectedProfile: isMe ? me : selectedChild,
       selectChild,
       loading: data === undefined && !error,
       error: data === undefined ? error : null,
       reload,
     }),
-    [childList, selectedChild, selectChild, data, error, reload],
+    [me, isMe, childList, selectedChild, selectChild, data, error, reload],
   )
 
   return <ChildContext.Provider value={value}>{children}</ChildContext.Provider>

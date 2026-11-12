@@ -1,9 +1,9 @@
 /**
- * Date helpers. The demo's "now" is fixed at Sunday 8 November 2026, 20:30 so
- * that every screen matches the design. Overdue status, days late, ages and
- * "Tomorrow" labels are all calculated against TODAY, never hard-coded.
+ * Date helpers. TODAY is the moment the app loaded; the API works out
+ * overdue status, days late and ages against the server's clock, and the
+ * screens use TODAY for "Today" / "Tomorrow" labels and date limits.
  */
-export const TODAY = new Date(2026, 10, 8, 20, 30)
+export const TODAY = new Date()
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MONTHS_LONG = [
@@ -15,7 +15,7 @@ const DAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 const DAY_MS = 86_400_000
 
 export function now() {
-  return new Date(TODAY)
+  return new Date()
 }
 
 /** Parses 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:mm' as a local date (no timezone shifts). */
@@ -38,6 +38,13 @@ export function toISODate(value) {
 export function toISODateTime(value) {
   const d = toDate(value)
   return `${toISODate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** True for a real calendar date written as YYYY-MM-DD. */
+export function isValidISODate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return false
+  const d = toDate(value)
+  return !Number.isNaN(d.getTime()) && toISODate(d) === value
 }
 
 export function startOfDay(value) {

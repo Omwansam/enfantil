@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Download, ShieldCheck, Syringe } from 'lucide-react'
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getImmunizations } from '../api/immunizations'
+import { getImmunizations, getOptionalVaccines, setOptionalVaccine } from '../api/immunizations'
 import AsyncContent from '../components/AsyncContent'
 import Badge, { StatusBadge } from '../components/Badge'
 import Button from '../components/Button'
@@ -11,7 +11,8 @@ import EmptyState from '../components/EmptyState'
 import PageHeader from '../components/PageHeader'
 import ProgressBar from '../components/ProgressBar'
 import RequireChild from '../components/RequireChild'
-import Skeleton, { SkeletonTable } from '../components/Skeleton'
+import Skeleton, { SkeletonList, SkeletonTable } from '../components/Skeleton'
+import Switch from '../components/Switch'
 import StatTile from '../components/StatTile'
 import Table, { Td, Th } from '../components/Table'
 import { useAsync } from '../hooks/useAsync'
@@ -64,13 +65,14 @@ function Immunizations({ child }) {
               icon={Syringe}
               title="No vaccines on record yet"
               description={`Your clinic will add ${child.firstName}’s vaccines when they confirm the record at the next visit.`}
-              action={<Button to="/family/visits/new">Request appointment</Button>}
+              action={<Button to={`/family/visits/new?for=${child.id}&type=vaccination`}>Book appointment</Button>}
             />
           </Card>
         }
       >
         {(data) => <ImmunizationContent data={data} />}
       </AsyncContent>
+      <OptionalVaccines child={child} />
     </>
   )
 }
@@ -153,6 +155,11 @@ function PlannedDoseCard({ dose }) {
           <Link to={`/family/vaccines/${dose.id}`} className="hover:underline">
             {dose.title}
           </Link>
+          {dose.optional && (
+            <Badge tone="neutral" className="ml-2 align-middle">
+              Optional (paid)
+            </Badge>
+          )}
         </h3>
         <StatusBadge status={dose.status} className={overdue ? 'bg-white' : undefined} />
       </div>
@@ -171,7 +178,7 @@ function PlannedDoseCard({ dose }) {
           {apptText} <span aria-hidden="true">→</span>
         </Link>
       ) : (
-        <p className="mt-1 text-[13px] text-slate-600">No appointment yet — your clinic will book it</p>
+        <p className="mt-1 text-[13px] text-slate-600">{dose.optional ? 'Ask for it at your next visit' : 'No appointment yet — the hospital will book it'}</p>
       )}
     </article>
   )
@@ -273,5 +280,73 @@ function AdministeredTable({ doses }) {
         })}
       </tbody>
     </Table>
+  )
+}
+
+/** Optional vaccines the hospital offers at a cost. They are planned only if the parent adds them. */
+function OptionalVaccines({ child }) {
+  const version = useDataVersion()
+  const state = useAsync(() => getOptionalVaccines(child.id), [child.id], version)
+  const [busy, setBusy] = useState(null)
+  const [error, setError] = useState('')
+
+  const toggle = async (v, inPlan) => {
+    setBusy(v.id)
+    setError('')
+    try {
+      await setOptionalVaccine(child.id, v.id, inPlan)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <section className="mt-5" aria-labelledby="optional-heading">
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="optional-heading" className="flex items-center gap-2 text-h2">
+              Optional vaccines
+              <Badge tone="neutral">Optional (paid)</Badge>
+            </h2>
+            <p className="mt-1 max-w-2xl text-[14px] text-slate-600">
+              Tumaini Family Hospital also offers these vaccines, which are not on the free KEPI schedule. They only appear in {child.firstName}’s plan if you add them, and
+              you pay at the visit.
+            </p>
+          </div>
+        </div>
+        <AsyncContent state={state} errorTitle="We couldn’t load optional vaccines" skeleton={<SkeletonList rows={3} avatar={false} className="-mx-5 mt-2" />}>
+          {(list) => (
+            <ul className="mt-4 grid gap-3 md:grid-cols-2">
+              {list.map((v) => (
+                <li key={v.id} className={cx('rounded-xl border p-4', v.inPlan ? 'border-teal-700 bg-teal-50/50' : 'border-line')}>
+                  <Switch
+                    label={v.name}
+                    description={`Protects against ${v.protects} · ${v.ageLabel} · ${v.price}`}
+                    checked={v.inPlan}
+                    disabled={busy === v.id || (v.inPlan && v.given > 0 && v.doses.every((d) => d.givenOn))}
+                    onChange={(on) => toggle(v, on)}
+                  />
+                  <p className="mt-1 text-[13px] text-slate-600">
+                    {v.given > 0
+                      ? `${v.given} dose${v.given === 1 ? '' : 's'} given`
+                      : v.inPlan
+                        ? `In the plan: due ${v.planned.map((d) => formatDate(d, 'short')).join(' and ')}`
+                        : `If added: due ${v.planned.map((d) => formatDate(d, 'short')).join(' and ')}`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </AsyncContent>
+        {error && (
+          <p role="alert" className="mt-3 text-small text-coral-700">
+            {error}
+          </p>
+        )}
+      </Card>
+    </section>
   )
 }

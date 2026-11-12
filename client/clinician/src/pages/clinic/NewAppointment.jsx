@@ -218,7 +218,7 @@ function BookingForm({ data, onBooked }) {
             onChange={(e) => set('time', e.target.value)}
             error={errors.time}
             disabled={!form.date}
-            hint={!form.date ? 'Choose a date first.' : availability.data?.closed ? 'The clinic is closed at weekends.' : undefined}
+            hint={!form.date ? 'Choose a date first.' : availability.data?.closed ? 'Closed on Sundays.' : undefined}
           >
             <option value="">{availability.loading && form.date ? 'Checking free times…' : 'Choose a time'}</option>
             {(slots ?? data.times.map((t) => ({ time: t }))).map((s) => (

@@ -30,6 +30,16 @@ const TABS = [
   { value: 'uptodate', label: 'Up to date' },
 ]
 
+const GROUPS = [
+  { value: 'all', label: 'All' },
+  { value: 'mothers', label: 'Mothers' },
+  { value: 'infants', label: 'Infants' },
+]
+
+function profileUrl(r) {
+  return r.kind === 'mother' ? `/clinic/mothers/${r.id}` : `/clinic/patients/${r.id}`
+}
+
 export default function Patients() {
   useDocumentTitle('Patients')
   const { facility } = useAuth()
@@ -37,6 +47,7 @@ export default function Patients() {
   const version = useDataVersion()
   const [params, setParams] = useSearchParams()
   const tab = TABS.some((t) => t.value === params.get('tab')) ? params.get('tab') : 'all'
+  const group = GROUPS.some((g) => g.value === params.get('group')) ? params.get('group') : 'all'
   const page = Math.max(1, Number(params.get('page')) || 1)
   const [query, setQuery] = useState(params.get('q') ?? '')
   const q = useDebouncedValue(query, 250)
@@ -53,7 +64,7 @@ export default function Patients() {
     setParams(next, { replace: true })
   }, [q, params, setParams])
 
-  const state = useAsync(() => listPatients({ q, tab, page }), [q, tab, page], version)
+  const state = useAsync(() => listPatients({ q, tab, group, page }), [q, tab, group, page], version)
   const data = state.data
 
   const setParam = (key, value, { resetPage = true } = {}) => {
@@ -67,20 +78,18 @@ export default function Patients() {
   const onExport = async () => {
     setExporting(true)
     try {
-      const rows = await exportPatients({ q, tab })
+      const rows = await exportPatients({ q, tab, group })
       downloadCsv(`enfantil-patients-${TODAY_ISO}.csv`, [
-        ['Child', 'Patient ID', 'Sex', 'Date of birth', 'Age', 'Caregiver', 'Relationship', 'Phone', 'Last visit', 'Next due', 'Next due date', 'Status'],
+        ['Type', 'Name', 'Patient ID', 'Age or status', 'Mother / caregiver', 'Phone', 'Last visit', 'Next', 'Next date', 'Status'],
         ...rows.map((r) => [
+          r.kind === 'mother' ? 'Mother' : 'Infant',
           r.fullName,
           r.patientId,
-          r.sexLabel,
-          r.dob,
-          r.age,
-          r.caregiver?.name,
-          r.caregiver?.relationship,
-          r.caregiver?.phoneLabel,
+          r.kind === 'mother' ? r.statusLabel : r.age,
+          r.kind === 'mother' ? r.children.map((c) => c.name).join('; ') : r.caregiver?.name,
+          r.kind === 'mother' ? r.phoneLabel : r.caregiver?.phoneLabel,
           r.lastVisitOn ?? '',
-          r.nextLabel,
+          r.nextDueText,
           r.nextOn ?? '',
           r.status,
         ]),
@@ -94,7 +103,11 @@ export default function Patients() {
     <>
       <PageHeader
         title="Patients"
-        subtitle={`${data?.authorisedTotal ?? '…'} children you are authorised to see at ${facility?.name}`}
+        subtitle={
+          data
+            ? `${data.groupCounts.mothers} mothers and ${data.groupCounts.infants} infants registered at ${facility?.name}`
+            : `Patients registered at ${facility?.name}`
+        }
         actions={
           <>
             <Button variant="neutral" icon={Download} onClick={onExport} loading={exporting} disabled={!data}>
@@ -113,7 +126,7 @@ export default function Patients() {
             value={query}
             onChange={setQuery}
             label="Search patients"
-            placeholder="Search by child, caregiver, phone or patient ID"
+            placeholder="Search mothers and infants by name, phone or patient ID"
             className="w-full sm:max-w-[420px]"
           />
           <p className="text-small text-slate-600">Sorted by next due date</p>
@@ -121,29 +134,46 @@ export default function Patients() {
 
         <Tabs
           idPrefix="patients"
-          label="Filter patients by status"
-          value={tab}
-          onChange={(v) => setParam('tab', v)}
-          className="border-b-0 px-3"
-          tabs={TABS.map((t) => ({
-            value: t.value,
+          label="Mothers or infants"
+          value={group}
+          onChange={(v) => setParam('group', v)}
+          className="px-3"
+          tabs={GROUPS.map((g) => ({
+            value: g.value,
             label: (
               <span className="inline-flex items-center gap-2">
-                {t.label}
-                <span className="rounded-full bg-sand px-2 py-0.5 text-[12px] font-semibold text-slate-600">{data ? data.counts[t.value] : '·'}</span>
+                {g.label}
+                <span className="rounded-full bg-sand px-2 py-0.5 text-[12px] font-semibold text-slate-600">{data ? data.groupCounts[g.value] : '·'}</span>
               </span>
             ),
           }))}
         />
+        <div className="flex flex-wrap gap-2 px-5 py-3" role="group" aria-label="Filter by status">
+          {TABS.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              aria-pressed={tab === t.value}
+              onClick={() => setParam('tab', t.value)}
+              className={cx(
+                'inline-flex min-h-9 items-center gap-2 rounded-full px-3.5 text-[13px] font-semibold',
+                tab === t.value ? 'bg-teal-700 text-white' : 'bg-sand text-slate-600 hover:text-ink',
+              )}
+            >
+              {t.label}
+              <span className={cx('rounded-full px-1.5 text-[11px]', tab === t.value ? 'bg-white/20' : 'bg-white')}>{data ? data.counts[t.value] : '·'}</span>
+            </button>
+          ))}
+        </div>
 
-        <TabPanel idPrefix="patients" value={tab}>
+        <TabPanel idPrefix="patients" value={group}>
           <DataTable caption="Authorised patients" minWidth={940}>
             <thead>
               <tr>
-                <Th>Child</Th>
-                <Th>Caregiver</Th>
+                <Th>Patient</Th>
+                <Th>{group === 'mothers' ? 'Children' : group === 'infants' ? 'Mother / caregiver' : 'Linked to'}</Th>
                 <Th>Last visit</Th>
-                <Th>Next due</Th>
+                <Th>Next</Th>
                 <Th>Status</Th>
                 <Th>
                   <span className="sr-only">Open</span>
@@ -208,29 +238,39 @@ export default function Patients() {
                 </TableMessage>
               ) : (
                 data.rows.map((r) => (
-                  <tr key={r.id} onClick={() => navigate(`/clinic/patients/${r.id}`)} className="cursor-pointer transition-colors hover:bg-[#FAF9F7]">
+                  <tr key={r.id} onClick={() => navigate(profileUrl(r))} className="cursor-pointer transition-colors hover:bg-[#FAF9F7]">
                     <Td>
                       <div className="flex items-center gap-3">
                         <Avatar initials={r.initials} tone={r.tone} size="sm" />
                         <div className="min-w-0">
-                          <Link
-                            to={`/clinic/patients/${r.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="block text-[14px] font-semibold text-ink hover:underline"
-                          >
+                          <Link to={profileUrl(r)} onClick={(e) => e.stopPropagation()} className="block text-[14px] font-semibold text-ink hover:underline">
                             {r.fullName}
                           </Link>
                           <span className="whitespace-nowrap text-[12px] text-muted">
-                            {r.ageShort} · <span className="font-mono text-[11.5px]">{r.patientId}</span>
+                            {r.kind === 'mother' ? <span className="font-semibold text-[#9D174D]">{r.statusLabel}</span> : r.ageShort} ·{' '}
+                            <span className="font-mono text-[11.5px]">{r.patientId}</span>
                           </span>
                         </div>
                       </div>
                     </Td>
                     <Td>
-                      {r.caregiver ? (
+                      {r.kind === 'mother' ? (
+                        <>
+                          <span className="block text-[14px] text-ink">
+                            {r.children.length ? r.children.map((c) => `${c.name} (${c.age})`).join(', ') : 'No children yet'}
+                          </span>
+                          <span className="text-[13px] text-slate-600">{r.phoneLabel}</span>
+                        </>
+                      ) : r.caregiver ? (
                         <>
                           <span className="block whitespace-nowrap text-[14px] text-ink">
-                            {r.caregiver.name} ({r.caregiver.relationship.toLowerCase()})
+                            {r.mother ? (
+                              <Link to={`/clinic/mothers/${r.mother.id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
+                                {r.mother.name} (mother)
+                              </Link>
+                            ) : (
+                              `${r.caregiver.name} (${r.caregiver.relationship.toLowerCase()})`
+                            )}
                           </span>
                           <span className="text-[13px] text-slate-600">{r.caregiver.phoneLabel}</span>
                         </>

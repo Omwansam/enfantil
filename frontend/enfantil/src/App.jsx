@@ -16,12 +16,19 @@ const Messages = lazy(() => import('./pages/Messages'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const Register = lazy(() => import('./pages/Register'))
-const RequestAppointment = lazy(() => import('./pages/RequestAppointment'))
+const BookAppointment = lazy(() => import('./pages/BookAppointment'))
 const Settings = lazy(() => import('./pages/Settings'))
 const SignIn = lazy(() => import('./pages/SignIn'))
 const VaccinationCard = lazy(() => import('./pages/VaccinationCard'))
 const Vaccines = lazy(() => import('./pages/Vaccines'))
 const Visits = lazy(() => import('./pages/Visits'))
+const MyHealth = lazy(() => import('./pages/me/MyHealth'))
+const Pregnancy = lazy(() => import('./pages/me/Pregnancy'))
+const Antenatal = lazy(() => import('./pages/me/Antenatal'))
+const AntenatalVisit = lazy(() => import('./pages/me/AntenatalVisit'))
+const MaternalProgress = lazy(() => import('./pages/me/MaternalProgress'))
+const MaternalVaccines = lazy(() => import('./pages/me/MaternalVaccines'))
+const Postnatal = lazy(() => import('./pages/me/Postnatal'))
 
 export default function App() {
   return (
@@ -47,7 +54,14 @@ export default function App() {
             <Route path="vaccines" element={<Vaccines />} />
             <Route path="vaccines/:doseId" element={<DoseDetail />} />
             <Route path="visits" element={<Visits />} />
-            <Route path="visits/new" element={<RequestAppointment />} />
+            <Route path="visits/new" element={<BookAppointment />} />
+            <Route path="me" element={<MyHealth />} />
+            <Route path="me/pregnancy" element={<Pregnancy />} />
+            <Route path="me/antenatal" element={<Antenatal />} />
+            <Route path="me/antenatal/:visitId" element={<AntenatalVisit />} />
+            <Route path="me/progress" element={<MaternalProgress />} />
+            <Route path="me/vaccines" element={<MaternalVaccines />} />
+            <Route path="me/postnatal" element={<Postnatal />} />
             <Route path="messages" element={<Messages />} />
             <Route path="messages/:conversationId" element={<Messages />} />
             <Route path="notifications" element={<Notifications />} />

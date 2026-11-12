@@ -18,6 +18,11 @@ const VisitNotes = lazy(() => import('./pages/clinic/VisitNotes'))
 const VisitNote = lazy(() => import('./pages/clinic/VisitNote'))
 const Coverage = lazy(() => import('./pages/clinic/Coverage'))
 const NotFound = lazy(() => import('./pages/clinic/NotFound'))
+const MotherProfile = lazy(() => import('./pages/clinic/MotherProfile'))
+const RecordAnc = lazy(() => import('./pages/clinic/RecordAnc'))
+const RecordPostnatal = lazy(() => import('./pages/clinic/RecordPostnatal'))
+const Requests = lazy(() => import('./pages/clinic/Requests'))
+const Notifications = lazy(() => import('./pages/clinic/Notifications'))
 
 export default function App() {
   return (
@@ -47,6 +52,11 @@ export default function App() {
             <Route path="visits" element={<VisitNotes />} />
             <Route path="visits/:visitId/note" element={<VisitNote />} />
             <Route path="coverage" element={<Coverage />} />
+            <Route path="mothers/:motherId" element={<MotherProfile />} />
+            <Route path="mothers/:motherId/anc/new" element={<RecordAnc />} />
+            <Route path="mothers/:motherId/postnatal/new" element={<RecordPostnatal />} />
+            <Route path="requests" element={<Requests />} />
+            <Route path="notifications" element={<Notifications />} />
             <Route path="*" element={<NotFound inApp />} />
           </Route>
           <Route path="*" element={<NotFound />} />

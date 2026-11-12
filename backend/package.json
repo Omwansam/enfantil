@@ -1,0 +1,39 @@
+{
+  "name": "enfantil-backend",
+  "version": "1.0.0",
+  "description": "Enfantil API: one Express + Prisma (PostgreSQL) backend for the family app and the clinician portal.",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.js",
+    "start": "tsx src/index.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset --force",
+    "test": "tsx scripts/smoke-test.js",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "prisma": "^7.10.1",
+    "tsx": "^4.23.15"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

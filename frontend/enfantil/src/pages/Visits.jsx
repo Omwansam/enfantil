@@ -1,7 +1,7 @@
 import { ArrowLeft, CalendarDays, CalendarPlus, Clock, MapPin, MessageCircle, Plus, Repeat } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { cancelAppointmentRequest, getAppointments } from '../api/appointments'
+import { cancelAppointmentRequest, getAppointments, respondToProposal } from '../api/appointments'
 import { openConversationWith } from '../api/messages'
 import Alert from '../components/Alert'
 import AsyncContent from '../components/AsyncContent'
@@ -25,12 +25,11 @@ import { cx } from '../utils/cx'
 import { formatDate, formatTime } from '../utils/dates'
 import { joinNames } from '../utils/format'
 
-const TIME_OF_DAY = { morning: 'Morning', afternoon: 'Afternoon', any: 'Any time' }
-
 export default function Visits() {
   useDocumentTitle('Visits')
   const version = useDataVersion()
   const { childList } = useChildren()
+  const forNames = ['you', ...childList.map((c) => c.firstName)]
   const [params, setParams] = useSearchParams()
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const state = useAsync(() => getAppointments({ when: 'all' }), [], version)
@@ -54,11 +53,11 @@ export default function Visits() {
     <>
       <PageHeader
         title="Appointments & visits"
-        subtitle={childList.length ? `For ${joinNames(childList.map((c) => c.firstName))}` : undefined}
+        subtitle={`For ${joinNames(forNames)} · Tumaini Family Hospital`}
         actions={
           <>
             <Button to="/family/visits/new" icon={Plus}>
-              Request appointment
+              Book appointment
             </Button>
             <Tabs
               variant="pill"
@@ -94,8 +93,8 @@ export default function Visits() {
                 <EmptyState
                   icon={CalendarDays}
                   title="No upcoming visits"
-                  description="When your clinic books a visit, or you request one, it will appear here."
-                  action={<Button to="/family/visits/new" icon={Plus}>Request appointment</Button>}
+                  description="When the hospital books a visit, or you request one, it appears here."
+                  action={<Button to="/family/visits/new" icon={Plus}>Book appointment</Button>}
                 />
               ) : (
                 <EmptyState icon={CalendarDays} title="No past visits yet" description="Completed and cancelled visits will be listed here." />
@@ -121,13 +120,14 @@ export default function Visits() {
                               active ? 'bg-teal-50 shadow-[inset_4px_0_0_#0F766E]' : 'hover:bg-[#FAFAF8]',
                             )}
                           >
-                            <DateTile date={appt.start} variant={active ? 'solid' : 'neutral'} />
+                            <DateTile date={appt.proposal?.start ?? appt.start} variant={active ? 'solid' : 'neutral'} />
                             <span className="min-w-0 flex-1">
                               <StatusBadge status={appt.displayStatus} className="mb-1 sm:hidden" />
                               <span className="block text-[15px] font-semibold leading-6 text-ink">{appt.title}</span>
                               <span className="block text-[14px] text-slate-600">
-                                {appt.child.firstName} · {appt.status === 'requested' ? TIME_OF_DAY[appt.timeOfDay] : formatTime(appt.start)}
-                                {appt.clinician ? ` · ${appt.clinician.name}` : ` · ${appt.facility.shortName}`}
+                                {appt.child.isMe ? 'You' : appt.child.firstName} · {formatTime(appt.proposal?.start ?? appt.start)}
+                                {appt.clinician ? ` · ${appt.clinician.name}` : ' · Any available doctor'}
+                                {appt.proposal && <span className="font-semibold text-planned"> · New time proposed</span>}
                               </span>
                             </span>
                             <span className="hidden sm:block">
@@ -166,12 +166,25 @@ function VisitDetail({ appt }) {
   const [error, setError] = useState('')
   const requested = appt.status === 'requested'
   const isUpcoming = appt.displayStatus === 'Upcoming'
+  const [responding, setResponding] = useState(null)
+
+  const respond = async (accept) => {
+    setResponding(accept ? 'accept' : 'decline')
+    setError('')
+    try {
+      await respondToProposal(appt.id, accept)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setResponding(null)
+    }
+  }
 
   const message = async () => {
     setMessaging(true)
     setError('')
     try {
-      const { id } = await openConversationWith({ clinicianId: appt.clinicianId ?? 'kl4-reception', childId: appt.childId })
+      const { id } = await openConversationWith({ clinicianId: appt.clinicianId ?? 'tfh-reception', childId: appt.childId })
       navigate(`/family/messages/${id}`)
     } catch (err) {
       setError(err.message)
@@ -198,12 +211,11 @@ function VisitDetail({ appt }) {
         <span className="font-mono text-[13px] text-muted">{appt.ref}</span>
       </div>
       <h2 id="visit-heading" className="mt-3 text-[22px] font-bold leading-8 text-ink sm:text-[24px]">
-        {requested
-          ? `Preferred ${formatDate(appt.start, 'weekdayYear')} · ${TIME_OF_DAY[appt.timeOfDay]}`
-          : `${formatDate(appt.start, 'weekdayYear')} · ${formatTime(appt.start, { twelveHour: true })}`}
+        {requested ? 'Requested: ' : ''}
+        {formatDate(appt.start, 'weekdayYear')} · {formatTime(appt.start, { twelveHour: true })}
       </h2>
       <p className="mt-0.5 text-[15px] text-slate-600">
-        {appt.title} · {appt.child.firstName}
+        {appt.title} · {appt.child.isMe ? 'for you' : appt.child.firstName}
       </p>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -222,8 +234,8 @@ function VisitDetail({ appt }) {
                 <Clock className="size-5" aria-hidden="true" />
               </span>
               <div>
-                <p className="text-[15px] font-semibold text-ink">Any available clinician</p>
-                <p className="text-small text-slate-600">The clinic will assign one</p>
+                <p className="text-[15px] font-semibold text-ink">Any available doctor</p>
+                <p className="text-small text-slate-600">The hospital will assign one</p>
               </div>
             </>
           )}
@@ -234,22 +246,49 @@ function VisitDetail({ appt }) {
           </span>
           <div className="min-w-0">
             <p className="text-[15px] font-semibold text-ink">{appt.facility.name}</p>
-            <p className="text-small text-slate-600">{appt.location ?? 'Room confirmed by SMS'}</p>
+            <p className="text-small text-slate-600">{appt.location ?? `${appt.facility.address} · room confirmed by SMS`}</p>
           </div>
         </div>
       </div>
 
-      {requested && (
+      {requested && !appt.proposal && (
         <Alert tone="info" className="mt-4">
-          Waiting for {appt.facility.shortName} to confirm. You’ll get an SMS with the exact time, usually within one working day.
+          Waiting for {appt.facility.name} to confirm. You’ll get an SMS and a notification, usually within one working day.
+        </Alert>
+      )}
+      {appt.proposal && (
+        <section className="mt-4 rounded-2xl border border-amber-200 bg-planned-bg p-4" aria-labelledby="proposal-heading">
+          <h3 id="proposal-heading" className="text-[15px] font-semibold text-planned">
+            New time proposed
+          </h3>
+          <p className="mt-1 text-[18px] font-bold text-ink">
+            {formatDate(appt.proposal.start, 'weekdayYear')} · {formatTime(appt.proposal.start, { twelveHour: true })}
+          </p>
+          <p className="text-[14px] text-slate-600">
+            {appt.proposal.clinician ? `With ${appt.proposal.clinician.name}. ` : ''}
+            {appt.proposal.note}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Button onClick={() => respond(true)} loading={responding === 'accept'} disabled={Boolean(responding)}>
+              Accept new time
+            </Button>
+            <Button variant="danger" onClick={() => respond(false)} loading={responding === 'decline'} disabled={Boolean(responding)}>
+              Decline
+            </Button>
+          </div>
+        </section>
+      )}
+      {appt.displayStatus === 'Declined' && (
+        <Alert tone="coral" className="mt-4" title="The hospital declined this request.">
+          {appt.summary}
         </Alert>
       )}
       {appt.note && (
         <p className="mt-4 rounded-xl bg-teal-50 px-4 py-3 text-[14px] text-slate-600">
-          <strong className="font-semibold text-teal-800">{requested ? 'Your note:' : 'Note from your clinic:'}</strong> {appt.note}
+          <strong className="font-semibold text-teal-800">{requested || appt.requestedAt ? 'Your note:' : 'Note from the hospital:'}</strong> {appt.note}
         </p>
       )}
-      {appt.summary && (
+      {appt.summary && appt.displayStatus !== 'Declined' && (
         <p className="mt-4 rounded-xl bg-page px-4 py-3 text-[14px] text-slate-600">
           <strong className="font-semibold text-ink">Visit summary:</strong> {appt.summary}
         </p>
@@ -285,7 +324,7 @@ function VisitDetail({ appt }) {
             <Button variant="secondary" icon={CalendarPlus} onClick={() => downloadAppointmentIcs(appt)}>
               Add to calendar
             </Button>
-            <Button variant="secondary" icon={Repeat} to={`/family/visits/new?child=${appt.childId}&reschedule=${appt.id}`}>
+            <Button variant="secondary" icon={Repeat} to={`/family/visits/new?for=${appt.childId}&type=${appt.visitType ?? 'general'}&reschedule=${appt.id}`}>
               Request a different time
             </Button>
           </div>
@@ -297,12 +336,12 @@ function VisitDetail({ appt }) {
             </Button>
           )}
           {!isUpcoming && !requested && (
-            <Button variant="secondary" icon={Plus} to={`/family/visits/new?child=${appt.childId}&reason=followup`}>
+            <Button variant="secondary" icon={Plus} to={`/family/visits/new?for=${appt.childId}`}>
               Book a follow-up
             </Button>
           )}
           <Button icon={MessageCircle} onClick={message} loading={messaging}>
-            Message {appt.clinician ? appt.clinician.shortName : appt.facility.shortName}
+            Message {appt.clinician ? appt.clinician.shortName : 'Reception'}
           </Button>
         </div>
       </div>

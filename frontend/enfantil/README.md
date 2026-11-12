@@ -1,22 +1,26 @@
-# Enfantil — caregiver web app
+# Enfantil — family web app
 
-The desktop/web version of Enfantil for parents and caregivers in Kenya: follow each
-child's Kenya KEPI vaccines, growth, visits and messages with their care team.
+The web app of the **Infant and Maternal Health Management System** (v1) for
+mothers and caregivers at **Tumaini Family Hospital, Kiambu Road, Kiambu**. A mother
+follows her own pregnancy, antenatal and postnatal care, her children's Kenya KEPI
+vaccines and growth, books appointments and messages the care team.
 
 Built with React 19 (JSX), Vite, React Router v6, Tailwind CSS v4, lucide-react and
-recharts. There is no backend yet: every screen reads mock data through async
-functions in `src/api/`, so they can be swapped for Express calls without touching
-the pages.
-
-The screens follow the "Enfantil — UI/UX Design" frames W1–W14 (caregiver web app).
+recharts. Data comes from the Enfantil API (`backend/`, Express + Prisma +
+PostgreSQL), which it shares with the clinician portal (`client/clinician`): a booking
+request sent here appears in the portal's queue, and what the doctors do (confirm a
+visit, record a dose or an antenatal visit, update the health record, reply) shows up
+here. The layout is responsive: a sidebar on desktop, and a top bar, menu drawer
+and bottom tab bar (Home · Health · Vaccines · Visits · Messages) on phones.
 
 ## Setup
 
-Requires Node 20 or newer.
+Requires Node 20 or newer, and the API running (see `backend/README.md`:
+`npm install`, `npm run db:migrate`, `npm run db:seed`, `npm run dev`).
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5173 (calls the API on http://localhost:5000)
 ```
 
 Other scripts:
@@ -27,60 +31,78 @@ npm run preview    # serve the production build
 npm run lint       # ESLint
 ```
 
-Optional: copy `.env.example` to `.env` to point "Go to the clinician portal" on the
-sign-in page at the clinician app (`client/clinician`, default `http://localhost:5174`).
+Optional: copy `.env.example` to `.env` to change where the app finds the API
+(`VITE_API_URL`, default `http://localhost:5000/api/family`) and where "Go to the
+clinician portal" points (`VITE_CLINICIAN_PORTAL_URL`, default `http://localhost:5174`).
 
-## Demo login
+## Demo logins
 
-| Field | Value |
-| --- | --- |
-| Phone | `0712 345 678` (also accepts `+254 712 345 678` or `712345678`) |
-| or email | `wanjiru.kamau@example.co.ke` |
-| Password | `Amani2026!` |
+| Mother                  | Phone          | Email                         | Password     | What you see                                                                                                                                        |
+| ----------------------- | -------------- | ----------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wanjiru Kamau (b. 1996) | `0712 345 678` | `wanjiru.kamau@example.co.ke` | `Amani2026!` | Postnatal: delivered Amani on 9 Feb 2026 (SVD, 3.2 kg, 39+2). Postnatal care complete, Td 3 can be given, a pending request and a proposed new time |
+| Njeri Mwangi (b. 1999)  | `0723 118 406` | `njeri.mwangi@example.co.ke`  | `Njeri2026!` | 26 weeks pregnant (LMP 9 May 2026, due 13 Feb 2027), 3 antenatal visits, son Baraka (3 years)                                                       |
 
 Other demo details:
 
-- **"Today" is Sunday 8 November 2026** (`TODAY` in `src/utils/dates.js`). Ages,
-  "Tomorrow" labels, overdue status and "91 days late" are all calculated from it.
-- **SMS codes** (SMS sign-in, forgot password, registration, linking a record): any
-  6 digits work; `000000` shows the wrong-code error.
-- **Add a child › Link a clinic record**: `THK-P-250118-007` with date of birth
-  18 Jan 2025 finds a new record (Baraka). `KL4-P-230604-031` with 4 Jun 2023 finds
-  Zawadi, who is already linked.
-- **Changes live in memory.** Sent messages, requests, read notifications and so on
-  reset when you reload the page. The session and the selected child are kept in
-  localStorage.
-- **Error states**: to see loading errors with "Try again", run this in the browser
-  console and reload:
+- **Real dates.** Ages, pregnancy weeks, overdue doses and visits due are worked out by
+  the API against today's date. The seed moves the demo dates by whole weeks so the
+  designed week stays current (`npm run db:seed` in `backend/` resets everything).
+- **SMS codes** (SMS sign-in, forgot password, registration, linking a record): no SMS
+  provider is connected. With the API's `OTP_DEMO=true` (the development default) any
+  6 digits work and `000000` shows the wrong-code error; with `OTP_DEMO=false` the API
+  prints the real code in its console.
+- **Add a child › Link a hospital record**: `TFH-P-250118-007` with date of birth
+  18 Jan 2025 finds Jabari Kamau, who is not linked yet.
+- **Register** a new account to try the "What would you like to track?" and "My health"
+  steps. A mother who registers gets a hospital record that the portal's Mothers list
+  shows straight away.
+- **Everything is saved** in PostgreSQL. The session (a token) and the selected profile
+  are kept in localStorage; an expired session sends you back to the sign-in page.
+- **One record, two apps.** Njeri's son is the same patient (`baraka-m`) in both apps.
+  Children you add yourself stay "pending" until the hospital confirms them.
 
-  ```js
-  localStorage.setItem('enfantil:failRate', '0.3') // 30% of API calls fail
-  localStorage.removeItem('enfantil:failRate')     // back to normal
-  ```
+## Sitemap
 
-## Screens and routes
+The profile switcher at the top of the sidebar (and the chips on the overview)
+chooses **Me** or a child. The navigation follows it.
 
-| Frame | Route | Screen |
-| --- | --- | --- |
-| W1 | `/sign-in` | Sign in (password or SMS code) |
-| W2 | `/register` | Create a family account (3 steps) |
-| — | `/forgot-password` | Phone → 6-digit SMS code → new password |
-| W3 | `/family` | Overview / dashboard |
-| W4 | `/family/health` | Health profile: growth chart, measurements, allergies, medicines, visit history |
-| W5 | `/family/vaccines` | Immunizations: progress, planned doses, administered doses |
-| W10 | `/family/vaccines/:doseId` | Vaccine dose detail |
-| W6 | `/family/visits` | Appointments & visits (`?visit=<id>`, `?tab=past`) |
-| W12 | `/family/visits/new` | Request an appointment (`?child=`, `?reason=`, `?reschedule=`) |
-| W7 | `/family/messages/:id?` | Messages |
-| W9 | `/family/notifications` | Notifications |
-| W11 | `/family/card` | Printable vaccination card and school share link |
-| W13 | `/family/children/new` | Add a child |
-| W8 | `/family/settings` | Profile & settings (`#reminders`, `#privacy`, …) |
-| W14 | `/family/help` | Help & support |
-| — | anything else | 404 |
+| Code      | Route                           | Screen                                                                                                                                           |
+| --------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| W1        | `/sign-in`                      | Sign in (password or SMS code)                                                                                                                   |
+| M1        | `/register`                     | Account → What to track (pregnancy / baby / both) → My health → Your baby → Confirm phone                                                        |
+| —         | `/forgot-password`              | Phone → SMS code → new password                                                                                                                  |
+| M2 / W3   | `/family`                       | Overview: the "Me" dashboard (pregnancy week or postnatal status, next visit, Td due, latest BP and weight, danger signs) or a child's dashboard |
+| M3        | `/family/me`                    | My health record: details, blood group, allergies, conditions, medicines, pregnancy history; doctor-updated items read-only                      |
+| M4        | `/family/me/pregnancy`          | Pregnancy tracker: week of 40, trimester, baby's size, guidance, danger signs, next visit                                                        |
+| M5        | `/family/me/antenatal`          | The 8 antenatal contacts with status and what is checked                                                                                         |
+| M6        | `/family/me/antenatal/:visitId` | One antenatal visit: BP, weight, fundal height, heartbeat, Hb, urine, supplements, note                                                          |
+| M7        | `/family/me/progress`           | Weight and blood-pressure charts with the normal range shaded, plus a table                                                                      |
+| M8        | `/family/me/vaccines`           | Maternal Td doses, planned vs given                                                                                                              |
+| M9        | `/family/me/postnatal`          | Delivery summary, postnatal visits, recovery checks, family planning, link to the baby                                                           |
+| W4        | `/family/health`                | Child's health profile                                                                                                                           |
+| W5        | `/family/vaccines`              | Child's KEPI vaccines, plus the **Optional (paid)** vaccines the hospital offers                                                                 |
+| W10       | `/family/vaccines/:doseId`      | Vaccine dose detail                                                                                                                              |
+| W6        | `/family/visits`                | Visits: Pending requests, proposed times (accept / decline), upcoming and past                                                                   |
+| M10 / W12 | `/family/visits/new`            | Book: who → visit type → doctor → day and time → note → review → "Request sent" (`?for=`, `?type=`, `?reschedule=`)                              |
+| W7        | `/family/messages/:id?`         | Messages                                                                                                                                         |
+| M11 / W9  | `/family/notifications`         | Notifications, including antenatal, postnatal, Td, request and record-update notices                                                             |
+| W11       | `/family/card`                  | Vaccination card and school share link                                                                                                           |
+| W13       | `/family/children/new`          | Add a child (link a hospital record or enter details)                                                                                            |
+| W8        | `/family/settings`              | Profile, reminders, language, **Who can see my records** (Tumaini care team and consent date), security                                          |
+| W14       | `/family/help`                  | Help & support                                                                                                                                   |
 
-Everything under `/family/*` is wrapped in `ProtectedRoute`; signed-out visitors are
-sent to `/sign-in` and returned to the page they wanted after signing in.
+### Flows
+
+- **Booking request → confirmation.** The mother sends a request from Visits ›
+  Book. It shows as amber **Pending**. The hospital confirms it (→ Upcoming),
+  proposes another time (the mother accepts or declines in Visits), or declines it with
+  a reason. Each outcome arrives as a notification.
+- **Mother–infant linking.** The baby appears under the mother's profile switcher.
+  The hospital links the record at delivery, or the mother links an existing record
+  with its patient ID and date of birth. Postnatal care (M9) links to the baby's record.
+- **Optional vaccines.** On a child's Vaccines page, switching an optional vaccine on
+  adds planned doses tagged "Optional (paid)"; switching it off removes the ones not
+  yet given.
 
 ## Folder structure
 
@@ -93,17 +115,18 @@ frontend/enfantil/
     ├── main.jsx             Router + AuthProvider
     ├── App.jsx              Routes (pages are lazy-loaded)
     ├── index.css            Tailwind import, base styles, focus ring, print stylesheet
-    ├── api/                 All data access: async functions over the mock data
-    │   ├── client.js        request() helper: delay, simulated failures, change events
-    │   ├── helpers.js       Shared lookups and derived fields (dose status, days late)
+    ├── api/                 All data access: one function per API call (client.js does the HTTP)
+    │   ├── client.js        http(): API base URL, token, ApiError, change events
     │   ├── auth.js          sign in, SMS code, password reset, registration
     │   ├── children.js      children, overview, health profile, find/link/add a child
     │   ├── growth.js        measurements
     │   ├── immunizations.js doses, dose detail, school share links
-    │   ├── appointments.js  visits, clinics, clinicians, appointment requests
+    │   ├── appointments.js  visits, booking options, free slots, requests, proposals
     │   ├── messages.js      conversations, read state, sending
     │   ├── notifications.js notifications, unread counts
-    │   ├── settings.js      profile, reminders, language, clinic access, password
+    │   ├── maternal.js      the mother's overview, health record, pregnancy, ANC,
+    │   │                    progress, Td doses and postnatal care
+    │   ├── settings.js      profile, reminders, language, record access, password
     │   └── help.js          help articles
     ├── components/          Small reusable UI pieces
     │   ├── Button, IconButton, Input, Select, Textarea, Checkbox, Switch,
@@ -112,21 +135,24 @@ frontend/enfantil/
     │   │   Accordion, Alert, Breadcrumb, PageHeader, Logo, QRPlaceholder, ChatBubble,
     │   │   GrowthChart
     │   ├── Modal, Drawer, EmptyState, ErrorState, Skeleton, AsyncContent, PageLoader
-    │   └── Sidebar, ChildSwitcher, RequireChild, ProtectedRoute, ScrollToTop
+    │   ├── MaternalCharts (weight, blood pressure), DangerSigns
+    │   └── Sidebar, BottomTabs, ChildSwitcher (profile switcher), RequireChild,
+    │       RequireMe, ProtectedRoute, ScrollToTop
     ├── context/
     │   ├── AuthContext.jsx  { user, role: 'caregiver' } + signIn / signOut
-    │   └── ChildContext.jsx selected child, saved to localStorage
-    ├── data/mockData.js     Caregiver, children, KEPI schedule and doses, growth,
-    │                        appointments, messages, notifications, settings, FAQs
+    │   └── ChildContext.jsx selected profile ("me" or a child), saved to localStorage
+    ├── data/counties.js     Kenya's counties for the profile form
     ├── hooks/               useAsync (loading/error/data), useDataVersion,
     │                        useUnreadCounts, useCountdown, useMediaQuery, useDocumentTitle
     ├── layouts/
-    │   ├── FamilyLayout.jsx 264px sidebar; top bar + drawer below 1024px
+    │   ├── FamilyLayout.jsx 264px sidebar; top bar, drawer and bottom tabs below 1024px
     │   └── AuthLayout.jsx   Top-bar layout (W2) and split sign-in layout (W1)
-    ├── pages/               One file per screen (see the table above)
-    └── utils/               dates.js (formatting, ages, days overdue), format.js
-                             (phone, email, password strength), calendar.js (.ics),
-                             storage.js, cx.js
+    ├── pages/               One file per screen (see the sitemap); pages/me/ holds
+    │                        the mother's own screens (M2–M9)
+    └── utils/               dates.js (formatting, ages, days overdue), pregnancy.js
+                             (gestational age, due date, ANC/PNC schedules, sizes,
+                             danger signs), format.js (phone, email, password
+                             strength), profile.js, calendar.js (.ics), storage.js, cx.js
 ```
 
 ## Design system
@@ -155,92 +181,25 @@ Notes where the build differs slightly from the frames:
   `coral-500` is 3.6:1, below the 4.5:1 AA minimum for small text. Unread **dots**
   still use `coral-500`.
 - **Download PDF** opens the browser's print dialog with the card's print stylesheet;
-  choose "Save as PDF". A backend can later return a generated PDF instead.
+  choose "Save as PDF". The API could later return a generated PDF instead.
 - The **QR code** on the vaccination card is a placeholder pattern, not a scannable
   code.
 - Notifications are listed newest first.
 
-## Replacing `src/api` with Express calls
+## The API
 
-Pages only import functions from `src/api/*` and expect them to return promises.
-Each function wraps its mock logic in `request()` from `src/api/client.js`. To move to
-a real backend, keep the function names and return shapes and swap the bodies.
+Pages only import functions from `src/api/*`. Each one is a single call to the
+Enfantil API through `http()` in `src/api/client.js`, which:
 
-1. Add a small fetch helper (for example in `src/api/client.js`):
+- adds the session token (`Authorization: Bearer …`) from localStorage or sessionStorage,
+- turns error responses into `ApiError` with the server's `message`, and `field` for the
+  input to highlight, so forms show errors inline,
+- signs you out and returns to `/sign-in` when the session has expired,
+- tells `useDataVersion` after every change, so lists and sidebar badges refresh.
 
-   ```js
-   const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
-
-   export async function http(path, { method = 'GET', body } = {}) {
-     const session = JSON.parse(localStorage.getItem('enfantil:session') ?? sessionStorage.getItem('enfantil:session') ?? 'null')
-     const res = await fetch(`${API_URL}${path}`, {
-       method,
-       headers: {
-         'Content-Type': 'application/json',
-         ...(session?.token && { Authorization: `Bearer ${session.token}` }),
-       },
-       body: body ? JSON.stringify(body) : undefined,
-     })
-     const data = await res.json().catch(() => null)
-     if (!res.ok) throw new ApiError(data?.message ?? 'Something went wrong.', { status: res.status, field: data?.field })
-     return data
-   }
-   ```
-
-2. Replace each mock body with a call. For example in `src/api/children.js`:
-
-   ```js
-   // before
-   export function getChildren() {
-     return request((db) => db.children.map((c) => enrichChild(db, c)))
-   }
-
-   // after
-   export function getChildren() {
-     return http('/children')
-   }
-   ```
-
-   For writes, call `emitChange()` (or keep `request(..., { mutates: true })`
-   semantics) after a successful response, so the sidebar badges and open lists
-   refresh through `useDataVersion`.
-
-3. Errors: forms show `error.message` inline, and show it next to a specific field
-   when the server returns `{ message, field }` (for example
-   `{ "message": "Enter a valid Kenyan mobile number.", "field": "phone" }`).
-
-4. Derived fields: the mock API adds `status` (`Given` / `Planned` / `Overdue`),
-   `daysLate`, `age`, `ageShort`, `initials` and nested `child`, `clinician` and
-   `facility` objects. Either return the same fields from Express, or keep the helpers
-   in `src/api/helpers.js` and apply them to the server response.
-
-5. Dates: replace the fixed `TODAY` in `src/utils/dates.js` with `new Date()` once the
-   data is real.
-
-Suggested Express endpoints, matching the current functions:
-
-| Function | Method and path |
-| --- | --- |
-| `signIn` | `POST /auth/sign-in` |
-| `sendSmsSignInCode`, `verifySmsSignInCode` | `POST /auth/sms-code`, `POST /auth/sms-code/verify` |
-| `requestPasswordReset`, `verifyResetCode`, `resetPassword` | `POST /auth/password-reset`, `…/verify`, `…/complete` |
-| `startRegistration`, `completeRegistration` | `POST /auth/register`, `POST /auth/register/confirm` |
-| `getChildren`, `getChild`, `getHealthProfile`, `getChildOverview` | `GET /children`, `GET /children/:id`, `…/health`, `…/overview` |
-| `findChildRecord`, `linkChildRecord`, `addChildManually` | `POST /children/lookup`, `POST /children/link`, `POST /children` |
-| `getMeasurements` | `GET /children/:id/measurements` |
-| `getImmunizations`, `getDose` | `GET /children/:id/immunizations`, `GET /doses/:id` |
-| `getShareLink`, `createShareLink`, `revokeShareLink` | `GET/POST/DELETE /children/:id/share-link` |
-| `getAppointments`, `getAppointment` | `GET /appointments?when=&childId=`, `GET /appointments/:id` |
-| `requestAppointment`, `cancelAppointmentRequest` | `POST /appointments/requests`, `DELETE /appointments/requests/:id` |
-| `getFacilities`, `getClinicians` | `GET /facilities`, `GET /facilities/:id/clinicians` |
-| `getConversations`, `getConversation`, `openConversationWith` | `GET /conversations`, `GET /conversations/:id`, `POST /conversations` |
-| `markConversationRead`, `sendMessage` | `POST /conversations/:id/read`, `POST /conversations/:id/messages` |
-| `getNotifications`, `markNotificationRead`, `markAllNotificationsRead`, `getUnreadCounts` | `GET /notifications`, `POST /notifications/:id/read`, `POST /notifications/read-all`, `GET /notifications/unread-counts` |
-| `getProfile`, `updateProfile` | `GET/PATCH /me` |
-| `getSettings`, `updateReminders`, `updateLanguage` | `GET /me/settings`, `PATCH /me/settings/reminders`, `PATCH /me/settings/language` |
-| `getClinicAccess`, `setClinicAccess` | `GET /me/clinic-access`, `PATCH /me/clinic-access/:id` |
-| `changePassword` | `POST /me/password` |
-| `getHelpArticles` | `GET /help/articles` |
+Validation used by forms for instant errors (`validateBooking`, `validateHealth`,
+`validateHealthItem`) stays in the app; the API checks the same rules again.
+The API's routes are listed in `backend/README.md`.
 
 The "Email app support" button uses `support@enfantil.app`; change `SUPPORT_EMAIL` in
 `src/pages/Help.jsx` to the real address.

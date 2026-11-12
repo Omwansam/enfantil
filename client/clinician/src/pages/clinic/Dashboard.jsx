@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronRight, FileText, MessageCircle, Plus, Syringe, TriangleAlert, Users } from 'lucide-react'
+import { Baby, Bell, CalendarClock, CalendarDays, ChevronRight, FileText, MessageCircle, Plus, Syringe, TriangleAlert, Users } from 'lucide-react'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getDashboard } from '../../api/dashboard'
@@ -20,6 +20,7 @@ import { useAsync } from '../../hooks/useAsync'
 import { useDataVersion } from '../../hooks/useDataVersion'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
+import { useNavCounts } from '../../hooks/useNavCounts'
 import { cx } from '../../utils/cx'
 import { formatDate, greeting, TODAY } from '../../utils/dates'
 import { pluralize } from '../../utils/format'
@@ -37,7 +38,10 @@ export default function Dashboard() {
     <>
       <div className="mb-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PatientSearch />
-        <p className="text-[14px] text-slate-600">{formatDate(TODAY, 'long')}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-[14px] text-slate-600">{formatDate(TODAY, 'long')}</p>
+          <NotificationBell />
+        </div>
       </div>
 
       <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -103,7 +107,7 @@ function DashboardContent({ data, notes }) {
   const { stats } = data
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           label="Authorised patients"
           value={stats.authorised}
@@ -137,11 +141,31 @@ function DashboardContent({ data, notes }) {
           iconTone="amber"
           to="/clinic/visits"
         />
+        <StatCard
+          label="Appointment requests"
+          value={stats.requestsPending}
+          note={stats.requestsAwaitingParent ? `${stats.requestsAwaitingParent} waiting for a parent to reply` : 'From the family app'}
+          noteTone={stats.requestsPending ? 'alert' : 'muted'}
+          icon={CalendarClock}
+          iconTone="amber"
+          to="/clinic/requests"
+        />
+        <StatCard
+          label="Pregnant patients due this week"
+          value={stats.pregnantDueThisWeek}
+          note={`${stats.pregnantPatients} pregnant patients in total`}
+          icon={Baby}
+          iconTone="teal"
+          to="/clinic/patients?group=mothers&tab=due"
+        />
       </div>
 
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <TodaySchedule today={data.today} nextId={data.next?.id} />
-        <PendingNotes state={notes} overdueToday={data.overdueToday} />
+        <div className="space-y-5">
+          <RequestsCard requests={data.requests} total={stats.requestsPending} />
+          <PendingNotes state={notes} overdueToday={data.overdueToday} />
+        </div>
       </div>
     </>
   )
@@ -185,7 +209,7 @@ function TodaySchedule({ today, nextId }) {
               return (
                 <tr
                   key={a.id}
-                  onClick={() => navigate(`/clinic/patients/${a.patientId}`)}
+                  onClick={() => navigate(a.isMother ? `/clinic/mothers/${a.patientId}` : `/clinic/patients/${a.patientId}`)}
                   className={cx('cursor-pointer transition-colors', isNext ? 'bg-teal-50' : 'hover:bg-[#FAF9F7]')}
                 >
                   <Td className={cx('text-[15px] font-bold tabular-nums', isNext ? 'text-teal-700' : cancelled ? 'text-slate-600' : 'text-ink')}>
@@ -197,13 +221,15 @@ function TodaySchedule({ today, nextId }) {
                       <Avatar initials={a.patient.initials} tone={a.patient.tone} size="sm" />
                       <div className="min-w-0">
                         <Link
-                          to={`/clinic/patients/${a.patientId}`}
+                          to={a.isMother ? `/clinic/mothers/${a.patientId}` : `/clinic/patients/${a.patientId}`}
                           onClick={(e) => e.stopPropagation()}
                           className={cx('block text-[14px] font-semibold leading-5 hover:underline', cancelled ? 'text-slate-600' : 'text-ink')}
                         >
                           {a.patient.fullName}
                         </Link>
-                        <span className="text-[12px] text-muted">{a.patient.age}</span>
+                        <span className={cx('text-[12px]', a.isMother ? 'font-medium text-[#9D174D]' : 'text-muted')}>
+                          {a.isMother ? a.patient.status.label : a.patient.age}
+                        </span>
                       </div>
                     </div>
                   </Td>
@@ -405,5 +431,77 @@ function RecordPicker({ open, onClose, today }) {
         </Button>
       </div>
     </Modal>
+  )
+}
+
+function NotificationBell() {
+  const counts = useNavCounts()
+  return (
+    <Link
+      to="/clinic/notifications"
+      aria-label={`Notifications${counts.notifications ? `, ${counts.notifications} unread` : ''}`}
+      className="relative inline-flex size-11 items-center justify-center rounded-xl border border-line bg-white text-ink hover:bg-[#F7F6F3]"
+    >
+      <Bell className="size-5" aria-hidden="true" />
+      {counts.notifications > 0 && (
+        <span
+          aria-hidden="true"
+          className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-coral-700 px-1 text-[11px] font-bold text-white"
+        >
+          {counts.notifications}
+        </span>
+      )}
+    </Link>
+  )
+}
+
+const TYPE_LABELS = {
+  antenatal: 'Antenatal',
+  postnatal: 'Postnatal',
+  vaccination: 'Baby vaccination',
+  growth: 'Growth check',
+  sick: 'Sick visit',
+  general: 'General consultation',
+}
+
+function RequestsCard({ requests, total }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between gap-3 px-1 pb-3">
+        <h2 className="text-h2">Appointment requests</h2>
+        <Badge tone={total ? 'planned' : 'completed'}>{total ? `${total} pending` : 'None'}</Badge>
+      </div>
+      {requests.length === 0 ? (
+        <p className="border-t border-line px-1 py-4 text-[14px] text-slate-600">No requests waiting. New ones from the family app appear here.</p>
+      ) : (
+        <ul className="divide-y divide-line border-t border-line">
+          {requests.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 px-1 py-3">
+              <Avatar
+                initials={r.subjectName
+                  .split(' ')
+                  .map((w) => w[0])
+                  .join('')
+                  .slice(0, 2)}
+                tone={r.subjectTone}
+                size="sm"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-semibold text-ink">{r.subjectName}</p>
+                <p className="text-[12px] text-slate-600">
+                  {TYPE_LABELS[r.visitType]} · prefers {formatDate(r.preferredStart, 'weekday')}
+                </p>
+              </div>
+              <Button variant="secondary" size="xs" to={`/clinic/requests?focus=${r.id}`} aria-label={`Review request for ${r.subjectName}`}>
+                Review
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link to="/clinic/requests" className="mt-2 inline-flex min-h-10 items-center px-1 text-[14px] font-semibold text-teal-700 hover:underline">
+        Open request queue
+      </Link>
+    </Card>
   )
 }

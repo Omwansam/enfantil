@@ -1,0 +1,697 @@
+// Enfantil — Infant and Maternal Health Management System (v1).
+// One shared database for the family app (frontend/enfantil) and the
+// clinician portal (client/clinician), at one private facility:
+// Tumaini Family Hospital, Kiambu Road, Kiambu.
+//
+// Conventions
+// - Every table has a string `id` primary key. Demo rows keep readable ids
+//   (amani, m-wanjiru, a-1109-amani); new rows get prefixed, time-based ids.
+// - Calendar dates are DATE columns; date-times are TIMESTAMP(0) WITHOUT TIME
+//   ZONE holding the hospital's local wall-clock time (Africa/Nairobi).
+// - `sortKey` keeps the order lists are shown in (inbox order, list order).
+// - Statuses that depend on today's date (dose Overdue / Due, ANC visit
+//   Overdue, "due this week") are never stored; the API works them out.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------------ facility & staff
+
+model Facility {
+  id         String  @id
+  name       String
+  shortName  String
+  department String?
+  clinic     String?
+  address    String?
+  county     String?
+  phone      String?
+  code       String?
+}
+
+model Room {
+  id      String @id // "Room 1"
+  label   String
+  sortKey Float  @default(0)
+}
+
+/// Clinical staff sign in to the portal; desk staff (kind = "desk", e.g. Tumaini Reception) only send messages.
+model Staff {
+  id           String   @id // achieng-otieno
+  kind         String   @default("clinician") // clinician | desk
+  name         String
+  shortName    String
+  title        String
+  staffNumber  String?  @unique // TFH-PAED-0217 (sign-in ID)
+  email        String?  @unique // work email (sign-in ID)
+  initials     String?
+  tone         String?
+  sees         String[] // family booking: which patients they see ("me" = mothers, "child")
+  passwordHash String?
+  active       Boolean  @default(true)
+  sortKey      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  appointments    Appointment[]
+  ancVisits       AncVisit[]
+  postnatalVisits PostnatalVisit[]
+  visitNotes      VisitNote[]
+  conversations   Conversation[]
+  notifications   StaffNotificationRecipient[]
+}
+
+// ------------------------------------------------------------- family accounts
+
+/// A family app account (usually the mother). `motherId` links her own maternal record.
+model Account {
+  id                   String    @id // cg-wanjiru (also her caregiver id on her children's records)
+  motherId             String?   @unique
+  mother               Mother?   @relation(fields: [motherId], references: [id])
+  firstName            String
+  lastName             String
+  fullName             String
+  relationship         String
+  phone                String    @unique // 9 digits, no leading 0: 712345678
+  email                String?
+  county               String?
+  memberSince          DateTime? @db.Date
+  avatarTone           String?
+  passwordHash         String
+  tracking             String    @default("baby") // pregnancy | baby | both
+  language             String    @default("en")
+  remindersSms         Boolean   @default(true)
+  remindersPush        Boolean   @default(true)
+  remindersWeeklyEmail Boolean   @default(false)
+  remindersTiming      String    @default("1 day before")
+  consentSince         DateTime? @db.Date
+  consentRecordedBy    String?
+  consentLastViewed    DateTime? @db.Timestamp(0)
+  sortKey              Float     @default(0)
+  createdAt            DateTime  @default(now())
+
+  shareLinks    ShareLink[]
+  notifications FamilyNotification[]
+  requests      Request[]
+  conversations Conversation[]
+}
+
+/// One-time SMS codes (sign-in, password reset, registration, linking a record).
+model OtpCode {
+  id        String    @id
+  purpose   String // sign-in | reset | register | link
+  phone     String
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([phone, purpose])
+}
+
+// --------------------------------------------------------------------- mothers
+
+model Mother {
+  id            String    @id // m-wanjiru
+  firstName     String
+  lastName      String
+  dob           DateTime? @db.Date
+  phone         String
+  patientNumber String?   @unique // TFH-M-960417-031
+  tone          String?
+  bloodGroup    String?
+  hasApp        Boolean   @default(false)
+  registeredOn  DateTime? @db.Date
+  nkdaBy        String? // "No known drug allergies" recorded by / at
+  nkdaAt        DateTime? @db.Timestamp(0)
+  sortKey       Float     @default(0)
+
+  account      Account?
+  pregnancy    Pregnancy?
+  history      PregnancyHistory[]
+  tdDoses      TdDose[]
+  healthItems  HealthItem[]
+  auditEntries AuditEntry[]
+  appointments Appointment[]
+  requests     Request[]
+  conversations Conversation[]
+}
+
+/// The mother's current (or most recent) pregnancy.
+model Pregnancy {
+  id       String @id
+  motherId String @unique
+  mother   Mother @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  lmp      DateTime @db.Date
+  edd      DateTime @db.Date
+  gravida  Int?
+  para     Int?
+  status   String // pregnant | delivered
+
+  ancVisits       AncVisit[]
+  delivery        Delivery?
+  postnatalVisits PostnatalVisit[]
+}
+
+model AncVisit {
+  id             String    @id
+  pregnancyId    String
+  pregnancy      Pregnancy @relation(fields: [pregnancyId], references: [id], onDelete: Cascade)
+  contact        Int? // 1–8; null for an extra visit
+  kind           String    @default("contact") // contact | extra
+  date           DateTime  @db.Date
+  clinicianId    String?
+  clinician      Staff?    @relation(fields: [clinicianId], references: [id])
+  bpSystolic     Int?
+  bpDiastolic    Int?
+  weightKg       Float?
+  fundalHeightCm Float?
+  fetalHeartRate Int?
+  hb             Float?
+  urineProtein   String?
+  urineGlucose   String?
+  supplements    String[]
+  tdGiven        String?
+  clinicalNote   String?
+  noteForMother  String?
+  nextVisitOn    DateTime? @db.Date
+  recordedAt     DateTime? @db.Timestamp(0)
+  sortKey        Float     @default(0)
+
+  @@index([pregnancyId])
+}
+
+model Delivery {
+  id           String    @id // same as pregnancyId
+  pregnancyId  String    @unique
+  pregnancy    Pregnancy @relation(fields: [pregnancyId], references: [id], onDelete: Cascade)
+  date         DateTime  @db.Date
+  time         String?
+  mode         String
+  gestation    String?
+  outcome      String
+  babySex      String?
+  babyWeightKg Float?
+  babyLengthCm Float?
+  apgar        String?
+  bloodLoss    String?
+  attendedBy   String?
+  childId      String? // the baby's patient record
+  place        String?
+  notes        String?
+}
+
+model PostnatalVisit {
+  id             String    @id
+  pregnancyId    String
+  pregnancy      Pregnancy @relation(fields: [pregnancyId], references: [id], onDelete: Cascade)
+  key            String // 48h | 1-2w | 4-6w
+  date           DateTime  @db.Date
+  time           String?
+  clinicianId    String?
+  clinician      Staff?    @relation(fields: [clinicianId], references: [id])
+  bpSystolic     Int?
+  bpDiastolic    Int?
+  tempC          Float?
+  weightKg       Float?
+  uterus         String?
+  bleeding       String?
+  perineum       String?
+  breasts        String?
+  epds           Int?
+  hb             Float?
+  mood           String?
+  baby           String? // short summary of the baby's check
+  babyWeightKg   Float?
+  babyFeeding    String?
+  babyCord       String?
+  babyJaundice   String?
+  babyTempC      Float?
+  familyPlanning String?
+  note           String?
+  nextVisitOn    DateTime? @db.Date
+  sortKey        Float     @default(0)
+
+  @@index([pregnancyId])
+}
+
+/// Tetanus-diphtheria doses, planned and given.
+model TdDose {
+  id         String    @id
+  motherId   String
+  mother     Mother    @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  dose       Int
+  givenOn    DateTime? @db.Date
+  batch      String?
+  givenBy    String?
+  dueOn      DateTime? @db.Date
+  earliestOn DateTime? @db.Date
+  latestOn   DateTime? @db.Date
+  note       String?
+  sortKey    Float     @default(0)
+
+  @@index([motherId])
+}
+
+model PregnancyHistory {
+  id           String    @id
+  motherId     String
+  mother       Mother    @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  year         Int?
+  outcome      String?
+  delivery     String?
+  babyWeightKg Float?
+  gestation    String?
+  childId      String?
+  place        String?
+  by           String?
+  at           DateTime? @db.Timestamp(0)
+  sortKey      Float     @default(0)
+
+  @@index([motherId])
+}
+
+// -------------------------------------------- health record items and the audit
+
+/// Allergies, conditions, medicines and diagnoses on a mother's or a child's record.
+model HealthItem {
+  id         String    @id
+  list       String // allergies | conditions | medicines | diagnoses
+  motherId   String?
+  mother     Mother?   @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  patientId  String?
+  patient    Patient?  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  substance  String?
+  reaction   String?
+  name       String?
+  detail     String?
+  status     String?
+  directions String?
+  dose       String?
+  code       String?
+  recordedOn DateTime? @db.Date
+  since      DateTime? @db.Date
+  by         String? // who added or last changed it
+  at         DateTime? @db.Timestamp(0)
+  source     String? // clinician | mother (added by the mother herself)
+  sortKey    Float     @default(0)
+
+  @@index([motherId])
+  @@index([patientId])
+}
+
+/// Every change a clinician makes to a record, with the reason (D5).
+model AuditEntry {
+  id        String   @id
+  motherId  String?
+  mother    Mother?  @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  patientId String?
+  patient   Patient? @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  at        DateTime @db.Timestamp(0)
+  by        String
+  action    String
+  reason    String?
+  sortKey   Float    @default(0)
+
+  @@index([motherId])
+  @@index([patientId])
+}
+
+// ------------------------------------------------------------ infants (patients)
+
+model Patient {
+  id                  String    @id // amani, p-001, p-new-301
+  facilityId          String    @default("tfh")
+  firstName           String
+  lastName            String
+  sex                 String // female | male
+  dob                 DateTime  @db.Date
+  patientNumber       String?   @unique // TFH-P-260209-014 (null until the hospital confirms a family-entered child)
+  tone                String?
+  birthWeightKg       Float?
+  birthLengthCm       Float?
+  birthNotificationNo String?
+  registeredOn        DateTime? @db.Date
+  bornAt              String?
+  mainClinicianId     String?
+  recordStatus        String    @default("linked") // linked | pending (entered by the family, not yet confirmed)
+  consentVerbal       Boolean?
+  consentRecordedAt   DateTime? @db.Date
+  pastVisits          String[] // visit dates (YYYY-MM-DD) from before the system was used
+  sortKey             Float     @default(0)
+
+  caregivers    Caregiver[]
+  healthItems   HealthItem[]
+  auditEntries  AuditEntry[]
+  contactLog    ContactAttempt[]
+  doses         Dose[]
+  optionalDoses OptionalDose[]
+  measurements  Measurement[]
+  appointments  Appointment[]
+  requests      Request[]
+  visitNotes    VisitNote[]
+  reminders     Reminder[]
+  shareLinks    ShareLink[]
+  conversations Conversation[]
+}
+
+/// A caregiver on a child's record. `caregiverId` equals the family account id when the caregiver uses the app.
+model Caregiver {
+  id           String    @id // "<patientId>:<caregiverId>"
+  caregiverId  String
+  patientId    String
+  patient      Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name         String
+  relationship String
+  phone        String
+  email        String?
+  primary      Boolean   @default(false)
+  hasApp       Boolean   @default(false)
+  motherId     String? // set when this caregiver is the child's mother with her own record
+  invitedAt    DateTime? @db.Date
+  tone         String?
+  sortKey      Float     @default(0)
+
+  @@index([patientId])
+  @@index([caregiverId])
+}
+
+/// Calls and SMS to a family about missed doses (defaulter tracing).
+model ContactAttempt {
+  id        String   @id
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type      String // sms | call
+  at        DateTime @db.Timestamp(0)
+  replied   Boolean?
+  note      String?
+  sortKey   Float    @default(0)
+
+  @@index([patientId])
+}
+
+/// A KEPI dose that was given. Planned doses and their due dates come from the schedule.
+model Dose {
+  id         String    @id // dose-amani-mr-1
+  patientId  String
+  patient    Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  key        String // bcg, opv-0, penta-2, vita-6, mr-1 …
+  givenOn    DateTime  @db.Date
+  batch      String?
+  site       String?
+  route      String?
+  givenBy    String?
+  givenById  String?
+  doseNumber String?
+  facility   String?
+  notes      String?
+  seq        Int?
+  recordedAt DateTime? @db.Timestamp(0)
+  sortKey    Float     @default(0)
+
+  @@unique([patientId, key])
+}
+
+/// Optional (paid) vaccines a parent added to the child's plan.
+model OptionalDose {
+  id            String    @id // amani-varicella, amani-hepa-1
+  patientId     String
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  vaccineId     String // tcv | varicella | hepa | flu
+  doseNumber    Int?
+  ageLabel      String?
+  dueOn         DateTime  @db.Date
+  givenOn       DateTime? @db.Date
+  batch         String?
+  givenBy       String?
+  facilityLabel String?
+  addedAt       DateTime? @db.Timestamp(0)
+  sortKey       Float     @default(0)
+
+  @@index([patientId])
+}
+
+model Measurement {
+  id         String  @id
+  patientId  String
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date
+  weightKg   Float?
+  heightCm   Float?
+  muacCm     Float?
+  tempC      Float?
+  by         String?
+  facilityId String?
+  sortKey    Float   @default(0)
+
+  @@index([patientId])
+}
+
+model ShareLink {
+  id        String   @id // "<accountId>:<patientId>"
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  url       String
+  createdOn DateTime @db.Date
+  expiresOn DateTime @db.Date
+}
+
+// ------------------------------------------------------- appointments & requests
+
+/// A booked visit for a child (patientId) or a mother (motherId).
+model Appointment {
+  id               String    @id
+  patientId        String?
+  patient          Patient?  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  motherId         String?
+  mother           Mother?   @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  start            DateTime  @db.Timestamp(0)
+  durationMin      Int       @default(15)
+  reason           String
+  reasonLong       String?
+  clinicianId      String?
+  clinician        Staff?    @relation(fields: [clinicianId], references: [id])
+  room             String?
+  status           String // upcoming | completed | cancelled
+  visitType        String? // antenatal | postnatal | vaccination | growth | sick | general
+  doseKeys         String[]
+  noteForCaregiver String?
+  clinicalNote     String?
+  cancelReason     String?
+  history          Json? // booked / rescheduled / cancelled events
+  ref              String? // TFH-A-10942 (shown to the family)
+  location         String?
+  summary          String? // outcome shown to the family after the visit
+  createdAt        DateTime? @db.Timestamp(0)
+  sortKey          Float     @default(0)
+
+  visitNotes VisitNote[]
+
+  @@index([start])
+  @@index([patientId])
+  @@index([motherId])
+}
+
+/// An appointment request from the family app (D7, M10).
+model Request {
+  id                      String    @id
+  patientId               String?
+  patient                 Patient?  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  motherId                String?
+  mother                  Mother?   @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  accountId               String?
+  account                 Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  forLabel                String?
+  requestedByName         String
+  requestedByRelationship String?
+  requestedByPhone        String?
+  requestedByMotherId     String?
+  visitType               String
+  title                   String?
+  preferredStart          DateTime  @db.Timestamp(0)
+  clinicianId             String?
+  note                    String?
+  requestedAt             DateTime  @db.Timestamp(0)
+  status                  String // pending | proposed | confirmed | declined | cancelled
+  proposalStart           DateTime? @db.Timestamp(0)
+  proposalClinicianId     String?
+  proposalNote            String?
+  proposalAt              DateTime? @db.Timestamp(0)
+  proposalBy              String?
+  confirmedStart          DateTime? @db.Timestamp(0)
+  confirmedClinicianId    String?
+  appointmentId           String?
+  respondedAt             DateTime? @db.Timestamp(0)
+  declineReason           String?
+  declineNote             String?
+  ref                     String?
+  rescheduleOf            String?
+  summary                 String?
+  sortKey                 Float     @default(0)
+
+  @@index([status])
+}
+
+model VisitNote {
+  id                 String      @id
+  appointmentId      String
+  appointment        Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patientId          String
+  patient            Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  authorId           String
+  author             Staff       @relation(fields: [authorId], references: [id])
+  status             String // not-started | draft | signed
+  savedAt            DateTime?   @db.Timestamp(0)
+  signedAt           DateTime?   @db.Timestamp(0)
+  measurements       Json? // { weightKg, heightCm, muacCm, tempC } as typed
+  history            String?
+  nutritionStatus    String?
+  plan               String?
+  followUpOn         DateTime?   @db.Date
+  diagnosis          String?
+  summary            String?
+  caregiverSummary   String?
+  shareWithCaregiver Boolean     @default(true)
+  sortKey            Float       @default(0)
+}
+
+// -------------------------------------------------------------------- messages
+
+/// A message thread. `ownerId` is the staff member whose inbox it is in; the other side is a
+/// family (caregiver / mother), a colleague (staffId) or an external desk (staffName).
+model Conversation {
+  id          String    @id
+  type        String // caregiver | mother | staff
+  ownerId     String
+  owner       Staff     @relation(fields: [ownerId], references: [id])
+  accountId   String?
+  account     Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  patientId   String?
+  patient     Patient?  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  caregiverId String?
+  motherId    String?
+  mother      Mother?   @relation(fields: [motherId], references: [id], onDelete: Cascade)
+  staffId     String? // colleague on a staff thread
+  staffName   String? // external desk on a staff thread
+  staffRole   String?
+  initials    String?
+  tone        String?
+  unread      Int       @default(0) // unread on the staff side
+  sortKey     Float     @default(0)
+
+  messages Message[]
+
+  @@index([ownerId])
+  @@index([accountId])
+}
+
+model Message {
+  id             String       @id
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  from           String // me (the inbox owner, staff) | them (family or colleague)
+  sentAt         DateTime     @db.Timestamp(0)
+  body           String
+  read           Boolean      @default(true) // read by the family
+  attachmentName String?
+  sortKey        Float        @default(0)
+
+  @@index([conversationId])
+}
+
+// --------------------------------------------------------------- notifications
+
+model StaffNotification {
+  id      String   @id
+  type    String // request | message | overdue | abnormal | note | record
+  title   String
+  body    String
+  at      DateTime @db.Timestamp(0)
+  link    String?
+  sortKey Float    @default(0)
+
+  recipients StaffNotificationRecipient[]
+}
+
+/// Who sees a staff notification, and whether they have read it.
+model StaffNotificationRecipient {
+  id             String            @id // "<notificationId>:<staffId>"
+  notificationId String
+  notification   StaffNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  staffId        String
+  staff          Staff             @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  read           Boolean           @default(false)
+
+  @@index([staffId])
+}
+
+model FamilyNotification {
+  id        String   @id
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type      String // message | vaccine | overdue | appointment | request-* | antenatal | postnatal | record …
+  childId   String // "me" or the child's patient id
+  title     String
+  body      String
+  createdAt DateTime @db.Timestamp(0)
+  read      Boolean  @default(false)
+  target    Json? // where the notification opens: { appointmentId } | { doseId } | { page } …
+  sortKey   Float    @default(0)
+
+  @@index([accountId])
+}
+
+// ----------------------------------------------------------- outreach & reports
+
+model Reminder {
+  id          String   @id
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  caregiverId String?
+  channel     String // sms | sms+app
+  sentAt      DateTime @db.Timestamp(0)
+  sortKey     Float    @default(0)
+}
+
+/// Monthly facility immunization report figures (frame 26).
+model CoverageReport {
+  id                String @id // 2026-10
+  label             String
+  registeredUnder2  Int
+  authorised        Int
+  fullyImmunized12m Int
+  overdueChildren   Int
+  overdueOver30     Int
+  sortKey           Float  @default(0)
+
+  doses CoverageDose[]
+}
+
+model CoverageDose {
+  id       String         @id // "<reportId>:<n>"
+  reportId String
+  report   CoverageReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  name     String
+  value    Int
+  sortKey  Float          @default(0)
+}
+
+/// Small counters and settings: patientSerial, remindersSentBeforeToday.
+model AppSetting {
+  id    String @id
+  value Json
+}
+
+/// Bumped on every write, so each API process notices changes made by another one.
+model Revision {
+  id    Int @id @default(1)
+  value Int @default(0)
+}

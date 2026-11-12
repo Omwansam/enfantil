@@ -177,7 +177,7 @@ function Thread({ id, showBack }) {
               </div>
               {conv.child && (
                 <span className="hidden shrink-0 rounded-full bg-teal-50 px-3 py-1 text-[13px] font-semibold text-teal-800 sm:inline-flex">
-                  About {conv.child.firstName}
+                  {conv.child.isMe ? 'About your own care' : `About ${conv.child.firstName}`}
                 </span>
               )}
             </header>

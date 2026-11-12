@@ -28,7 +28,7 @@ export default function AddChild() {
   return (
     <>
       <Breadcrumb items={[{ label: 'Settings', to: '/family/settings' }, { label: 'Add a child' }]} />
-      <PageHeader title="Add a child" subtitle="Link a record your clinic already has, or enter the details yourself." />
+      <PageHeader title="Add a child" subtitle="Link the record Tumaini Family Hospital already has, or enter the details yourself." />
 
       <fieldset>
         <legend className="sr-only">How do you want to add your child?</legend>
@@ -39,7 +39,7 @@ export default function AddChild() {
             checked={mode === 'link'}
             onChange={setMode}
             icon={Link2}
-            title="Link a clinic record"
+            title="Link a hospital record"
             description="Vaccines and visits appear straight away"
             className="min-h-[76px] rounded-2xl"
           />
@@ -50,7 +50,7 @@ export default function AddChild() {
             onChange={setMode}
             icon={PenLine}
             title="Enter details myself"
-            description="Your clinic confirms them at the next visit"
+            description="The hospital confirms them at the next visit"
             className="min-h-[76px] rounded-2xl"
           />
         </div>
@@ -64,12 +64,12 @@ export default function AddChild() {
             <div className="mx-auto max-w-[210px] rounded-lg bg-white p-3 shadow-card">
               <span className="block h-2 w-3/4 rounded bg-[#E7E5E0]" />
               <span className="mt-2 block h-2 w-1/2 rounded bg-[#E7E5E0]" />
-              <span className="mt-3 block rounded-md border-2 border-coral-500 px-2 py-1.5 font-mono text-[11px] font-bold text-ink">KL4-P-230604-031</span>
+              <span className="mt-3 block rounded-md border-2 border-coral-500 px-2 py-1.5 font-mono text-[11px] font-bold text-ink">TFH-P-250118-007</span>
               <span className="mt-3 block h-2 w-2/3 rounded bg-[#E7E5E0]" />
             </div>
           </div>
           <p className="mt-4 text-[14px] leading-6 text-slate-600">
-            It&apos;s printed on page 1 of the Mother &amp; Child Health handbook, or on the clinic card. No ID? Choose “Enter details myself”.
+            It&apos;s printed on page 1 of the Mother &amp; Child Health handbook, or on the hospital card. No ID? Choose “Enter details myself”.
           </p>
         </Card>
       </div>
@@ -99,7 +99,7 @@ function LinkRecordForm({ prefill }) {
   const find = async (event) => {
     event.preventDefault()
     const found = {}
-    if (!form.patientId.trim()) found.patientId = 'Enter the clinic patient ID'
+    if (!form.patientId.trim()) found.patientId = 'Enter the hospital patient ID'
     if (!form.dob) found.dob = 'Enter your child’s date of birth'
     else if (form.dob > toISODate(TODAY)) found.dob = 'The date of birth can’t be in the future'
     setErrors(found)
@@ -137,8 +137,8 @@ function LinkRecordForm({ prefill }) {
       <form onSubmit={find} noValidate>
         <div className="grid gap-5 sm:grid-cols-2">
           <Input
-            label="Clinic patient ID"
-            placeholder="KL4-P-230604-031"
+            label="Hospital patient ID"
+            placeholder="TFH-P-250118-007"
             autoCapitalize="characters"
             inputClassName="font-mono uppercase"
             value={form.patientId}
@@ -247,7 +247,7 @@ function ManualForm() {
     try {
       const child = await addChildManually(form)
       selectChild(child.id)
-      navigate('/family', { state: { flash: `${child.firstName} has been added. Your clinic will confirm the details at the next visit.` } })
+      navigate('/family', { state: { flash: `${child.firstName} has been added. Tumaini Family Hospital will confirm the details at the next visit.` } })
     } catch (err) {
       setSaveError(err.message)
       setSaving(false)
@@ -272,11 +272,11 @@ function ManualForm() {
           </div>
           <FieldMessage error={errors.sex} />
         </fieldset>
-        <Input className="sm:col-span-2" label="Place of birth" placeholder="e.g. Kiambu Level 4 Hospital" value={form.placeOfBirth} onChange={set('placeOfBirth')} error={errors.placeOfBirth} />
+        <Input className="sm:col-span-2" label="Place of birth" placeholder="e.g. Tumaini Family Hospital" value={form.placeOfBirth} onChange={set('placeOfBirth')} error={errors.placeOfBirth} />
         <Input label="Birth weight (kg)" optional type="number" inputMode="decimal" step="0.1" min="0.5" max="6" value={form.birthWeightKg} onChange={set('birthWeightKg')} error={errors.birthWeightKg} />
         <Input label="Birth length (cm)" optional type="number" inputMode="decimal" step="0.5" min="30" max="60" value={form.birthLengthCm} onChange={set('birthLengthCm')} error={errors.birthLengthCm} />
       </div>
-      <p className="mt-4 text-small text-slate-600">Find these in the Mother &amp; Child Health handbook. Your clinic checks them at the next visit.</p>
+      <p className="mt-4 text-small text-slate-600">Find these in the Mother &amp; Child Health handbook. The hospital checks them at the next visit.</p>
       {saveError && (
         <Alert tone="coral" role="alert" className="mt-4">
           {saveError}

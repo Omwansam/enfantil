@@ -1,14 +1,13 @@
 import { ChevronRight, CircleCheck, Hospital, LogOut, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { changePassword, getClinicAccess, getProfile, getSettings, setClinicAccess, updateLanguage, updateProfile, updateReminders } from '../api/settings'
+import { changePassword, getProfile, getRecordAccess, getSettings, updateLanguage, updateProfile, updateReminders } from '../api/settings'
 import Alert from '../components/Alert'
 import AsyncContent from '../components/AsyncContent'
 import Avatar from '../components/Avatar'
 import Button from '../components/Button'
 import Card, { CardHeader } from '../components/Card'
 import Input from '../components/Input'
-import Modal from '../components/Modal'
 import PageHeader from '../components/PageHeader'
 import SegmentedControl from '../components/SegmentedControl'
 import Select from '../components/Select'
@@ -16,9 +15,8 @@ import { SkeletonCard, SkeletonList } from '../components/Skeleton'
 import Switch from '../components/Switch'
 import { useAuth } from '../context/AuthContext'
 import { useChildren } from '../context/ChildContext'
-import { counties } from '../data/mockData'
+import { counties } from '../data/counties'
 import { useAsync } from '../hooks/useAsync'
-import { useDataVersion } from '../hooks/useDataVersion'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { cx } from '../utils/cx'
 import { formatDate, formatTime, isSameDay, TODAY } from '../utils/dates'
@@ -29,7 +27,7 @@ const SECTIONS = [
   { id: 'children', label: 'Children' },
   { id: 'reminders', label: 'Reminders' },
   { id: 'language', label: 'Language' },
-  { id: 'privacy', label: 'Privacy & access' },
+  { id: 'privacy', label: 'Privacy' },
   { id: 'security', label: 'Security' },
 ]
 
@@ -109,7 +107,7 @@ export default function Settings() {
             <RemindersSection />
             <LanguageSection />
           </div>
-          <ClinicAccessSection />
+          <RecordAccessSection />
           <SecuritySection />
         </div>
       </div>
@@ -265,7 +263,7 @@ function ChildrenSection() {
                 <span className="min-w-0 flex-1">
                   <span className="block text-[15px] font-semibold text-ink">{child.fullName}</span>
                   <span className="block text-small text-slate-600">
-                    {child.age} · {child.facility?.shortName ?? 'Waiting for clinic'}
+                    {child.age} · {child.recordStatus === 'linked' ? 'Linked to the hospital record' : 'Waiting for the hospital to confirm'}
                   </span>
                 </span>
                 <ChevronRight className="size-5 text-slate-600" aria-hidden="true" />
@@ -377,104 +375,56 @@ function LanguageSection() {
   )
 }
 
-function lastViewedLabel(date) {
-  return isSameDay(date, TODAY) ? 'today' : formatDate(date, 'short')
-}
-
-function ClinicAccessSection() {
-  const version = useDataVersion()
-  const access = useAsync(getClinicAccess, [], version)
-  const [confirming, setConfirming] = useState(null)
-  const [busyId, setBusyId] = useState(null)
-  const [error, setError] = useState('')
-
-  const setActive = async (item, active) => {
-    setBusyId(item.id)
-    setError('')
-    try {
-      await setClinicAccess(item.id, active)
-      setConfirming(null)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusyId(null)
-    }
-  }
-
+function RecordAccessSection() {
+  const access = useAsync(getRecordAccess, [])
   return (
     <Card id="privacy" className="scroll-mt-6 p-5 sm:p-6" aria-labelledby="privacy-heading">
       <h2 id="privacy-heading" className="text-h2">
-        Clinics with access
+        Who can see my records
       </h2>
-      <p className="text-small text-slate-600">These facilities can see and update your children&apos;s records.</p>
-      <AsyncContent
-        state={access}
-        errorTitle="We couldn’t load clinic access"
-        skeleton={<SkeletonList rows={2} className="-mx-5 mt-2" />}
-        isEmpty={(list) => list.length === 0}
-        empty={<p className="mt-4 text-[14px] text-slate-600">No clinics have access yet. Link a child’s record to give their clinic access.</p>}
-      >
-        {(list) => (
-          <ul className="mt-3 divide-y divide-line border-t border-line">
-            {list.map((item) => {
-              const names = joinNames(item.children.map((c) => c.firstName))
-              return (
-                <li key={item.id} className="flex flex-wrap items-center gap-3 py-4">
-                  <span className={cx('flex size-10 shrink-0 items-center justify-center rounded-xl', item.active ? 'bg-teal-50 text-teal-700' : 'bg-[#F1F0EC] text-muted')}>
-                    <Hospital className="size-5" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className={cx('text-[15px] font-semibold', item.active ? 'text-ink' : 'text-slate-600')}>{item.facility.name}</p>
-                    {item.active ? (
-                      <p className="text-small text-slate-600">
-                        {names} · since {formatDate(item.since)} · last viewed {lastViewedLabel(item.lastViewed)}
-                      </p>
-                    ) : (
-                      <p className="text-small text-coral-700" role="status">
-                        Access removed. {item.facility.shortName} can no longer see {names}&apos;s records.
-                      </p>
-                    )}
-                  </div>
-                  {item.active ? (
-                    <Button variant="danger" size="sm" onClick={() => setConfirming(item)}>
-                      Remove access
-                    </Button>
-                  ) : (
-                    <Button variant="secondary" size="sm" loading={busyId === item.id} onClick={() => setActive(item, true)}>
-                      Undo
-                    </Button>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
+      <AsyncContent state={access} errorTitle="We couldn’t load who has access" skeleton={<SkeletonList rows={2} className="-mx-5 mt-2" />}>
+        {(a) => (
+          <>
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-line p-4">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+                <Hospital className="size-5" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-ink">{a.facility.name} care team</p>
+                <p className="text-small text-slate-600">{a.facility.address}</p>
+                <p className="mt-2 text-[14px] text-slate-600">
+                  Can see and update records for {joinNames(a.people.map((p) => p.name))}.
+                </p>
+                <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Care team">
+                  {a.team.map((t) => (
+                    <li key={t.id} className="rounded-full bg-page px-2.5 py-1 text-[12px] font-medium text-slate-600">
+                      {t.name} · {t.role}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <dl className="mt-4 grid gap-3 text-[14px] sm:grid-cols-2">
+              <div className="rounded-xl bg-page px-4 py-3">
+                <dt className="text-slate-600">Consent given</dt>
+                <dd className="font-semibold text-ink">
+                  {a.consent.since ? formatDate(a.consent.since) : 'At your first visit'}
+                  {a.consent.recordedBy && <span className="block text-small font-normal text-slate-600">Recorded by {a.consent.recordedBy}</span>}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-page px-4 py-3">
+                <dt className="text-slate-600">Last opened by the care team</dt>
+                <dd className="font-semibold text-ink">
+                  {a.consent.lastViewed ? `${isSameDay(a.consent.lastViewed, TODAY) ? 'Today' : formatDate(a.consent.lastViewed)}, ${formatTime(a.consent.lastViewed)}` : 'Not yet'}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-4 text-small text-slate-600">
+              No one outside {a.facility.name} can see your records. To withdraw consent or get a copy of your data, ask the records desk or call {a.facility.phone}.
+            </p>
+          </>
         )}
       </AsyncContent>
-      {error && (
-        <Alert tone="coral" role="alert" className="mt-3">
-          {error}
-        </Alert>
-      )}
-      <Modal
-        open={Boolean(confirming)}
-        onClose={() => setConfirming(null)}
-        title={confirming ? `Remove ${confirming.facility.name}’s access?` : ''}
-        description={
-          confirming
-            ? `${confirming.facility.shortName} will no longer see or update ${joinNames(confirming.children.map((c) => c.firstName))}’s records, and vaccines given there won’t appear here. You can undo this straight away.`
-            : ''
-        }
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setConfirming(null)}>
-              Keep access
-            </Button>
-            <Button variant="dangerSolid" loading={busyId === confirming?.id} onClick={() => setActive(confirming, false)}>
-              Remove access
-            </Button>
-          </>
-        }
-      />
     </Card>
   )
 }

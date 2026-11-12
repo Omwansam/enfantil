@@ -1,6 +1,6 @@
-import { request } from './client'
-import { helpArticles, helpTopics } from '../data/mockData'
+/** Help articles. */
+import { get } from './client'
 
 export function getHelpArticles() {
-  return request(() => ({ topics: helpTopics, articles: helpArticles }), { delay: 200 })
+  return get('/help/articles')
 }

@@ -241,11 +241,14 @@ export default function Appointments() {
                         <div className="flex items-center gap-2.5">
                           <Avatar initials={a.patient.initials} tone={a.patient.tone} size="sm" />
                           <div className="min-w-0">
-                            <Link to={`/clinic/patients/${a.patientId}`} className="block whitespace-nowrap text-[14px] font-semibold text-ink hover:underline">
+                            <Link
+                              to={a.isMother ? `/clinic/mothers/${a.patientId}` : `/clinic/patients/${a.patientId}`}
+                              className="block whitespace-nowrap text-[14px] font-semibold text-ink hover:underline"
+                            >
                               {a.patient.fullName}
                             </Link>
                             <span className="text-[12px] text-muted">
-                              {a.patient.ageShort} · {a.room}
+                              <span className={a.isMother ? 'font-medium text-[#9D174D]' : undefined}>{a.patient.ageShort}</span> · {a.room}
                             </span>
                           </div>
                         </div>
@@ -257,7 +260,12 @@ export default function Appointments() {
                       </Td>
                       <Td>
                         <div className="flex gap-1.5">
-                          <Button variant="outlineNeutral" size="xs" to={`/clinic/patients/${a.patientId}`} aria-label={`Open ${a.patient.fullName}`}>
+                          <Button
+                            variant="outlineNeutral"
+                            size="xs"
+                            to={a.isMother ? `/clinic/mothers/${a.patientId}` : `/clinic/patients/${a.patientId}`}
+                            aria-label={`Open ${a.patient.fullName}`}
+                          >
                             Open
                           </Button>
                           {a.status === 'upcoming' && (
@@ -410,7 +418,7 @@ function RescheduleForm({ appointment: a, clinicians, onClose, onDone }) {
             ))}
           </div>
         ) : slots.data.closed ? (
-          <p className="rounded-xl bg-amber-50 px-4 py-3 text-[14px] text-amber-800">The MCH clinic is closed at weekends. Choose a weekday.</p>
+          <p className="rounded-xl bg-amber-50 px-4 py-3 text-[14px] text-amber-800">The hospital’s clinics are closed on Sundays. Choose another day.</p>
         ) : slots.data.slots.length === 0 ? (
           <p className="text-[14px] text-slate-600">Choose a date to see free times.</p>
         ) : (

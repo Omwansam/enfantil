@@ -8,5 +8,5 @@ export function useNavCounts() {
   const { user } = useAuth()
   const version = useDataVersion()
   const { data } = useAsync(() => getNavCounts(user?.id), [user?.id], version)
-  return data ?? { messages: 0, visitNotes: 0 }
+  return data ?? { messages: 0, visitNotes: 0, requests: 0, notifications: 0 }
 }

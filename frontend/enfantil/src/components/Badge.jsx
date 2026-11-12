@@ -22,6 +22,9 @@ const STATUS_TONES = {
   Planned: 'planned',
   Requested: 'planned',
   Pending: 'planned',
+  Declined: 'cancelled',
+  'Not needed': 'neutral',
+  'Optional (paid)': 'neutral',
   On: 'completed',
   Off: 'cancelled',
 }

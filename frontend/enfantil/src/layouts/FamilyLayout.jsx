@@ -1,6 +1,7 @@
 import { Menu } from 'lucide-react'
 import { Suspense, useState } from 'react'
 import { Link, Outlet } from 'react-router-dom'
+import BottomTabs from '../components/BottomTabs'
 import Drawer from '../components/Drawer'
 import IconButton from '../components/IconButton'
 import Logo from '../components/Logo'
@@ -38,11 +39,13 @@ export default function FamilyLayout() {
           <Sidebar onNavigate={closeDrawer} />
         </Drawer>
 
-        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1260px] px-4 py-6 outline-none sm:px-6 lg:px-10 lg:py-8 print:max-w-none print:p-0">
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1260px] px-4 pb-28 pt-6 outline-none sm:px-6 lg:px-10 lg:py-8 print:max-w-none print:p-0">
           <Suspense fallback={<PageLoader />}>
             <Outlet />
           </Suspense>
         </main>
+
+        <BottomTabs />
       </div>
     </ChildProvider>
   )

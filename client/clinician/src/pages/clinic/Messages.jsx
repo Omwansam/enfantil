@@ -231,8 +231,8 @@ function ThreadView({ c, desktop }) {
             {c.phone && ` · ${c.phone}`}
           </p>
         </div>
-        {c.patientId && (
-          <Button variant="secondary" size="sm" to={`/clinic/patients/${c.patientId}`}>
+        {(c.patientId || c.motherId) && (
+          <Button variant="secondary" size="sm" to={c.motherId ? `/clinic/mothers/${c.motherId}` : `/clinic/patients/${c.patientId}`}>
             View patient
           </Button>
         )}

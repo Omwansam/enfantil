@@ -5,13 +5,14 @@ import Avatar from './Avatar'
 import Skeleton from './Skeleton'
 import { useChildren } from '../context/ChildContext'
 import { cx } from '../utils/cx'
+import { profileDetail, profileName } from '../utils/profile'
 
 /**
- * Picks the child every page shows.
- * variant: 'sidebar' (VIEWING · Amani · 9 months), 'button' (Switch child), 'chip' (avatar + name).
+ * Picks the profile every page shows: the mother ("Me") or one of her children.
+ * variant: 'sidebar' (VIEWING · Me · Wanjiru), 'button' (Switch profile), 'chip' (avatar + name).
  */
 export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align = 'left', className }) {
-  const { childList, selectedChild, selectChild } = useChildren()
+  const { profiles, selectedProfile, selectChild } = useChildren()
   const [open, setOpen] = useState(false)
   const rootRef = useRef(null)
   const buttonRef = useRef(null)
@@ -20,16 +21,16 @@ export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align =
 
   useEffect(() => {
     if (!open) return undefined
-    const selectedIndex = Math.max(0, childList.findIndex((c) => c.id === selectedChild?.id))
+    const selectedIndex = Math.max(0, profiles.findIndex((p) => p.id === selectedProfile?.id))
     itemRefs.current[selectedIndex]?.focus()
     const onPointer = (event) => {
       if (!rootRef.current?.contains(event.target)) setOpen(false)
     }
     document.addEventListener('mousedown', onPointer)
     return () => document.removeEventListener('mousedown', onPointer)
-  }, [open, childList, selectedChild])
+  }, [open, profiles, selectedProfile])
 
-  if (!selectedChild) {
+  if (!selectedProfile) {
     return <Skeleton className={cx(variant === 'sidebar' ? 'h-[60px] w-full rounded-xl' : 'h-11 w-36 rounded-xl', className)} />
   }
 
@@ -63,11 +64,12 @@ export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align =
   const trigger = {
     sidebar: (
       <>
-        <Avatar initials={selectedChild.initials} tone={selectedChild.tone} size="sm" />
+        <Avatar initials={selectedProfile.initials} tone={selectedProfile.tone} size="sm" />
         <span className="min-w-0 flex-1 text-left">
           <span className="block text-[11px] font-semibold tracking-[0.06em] text-muted">VIEWING</span>
           <span className="block truncate text-[14px] font-semibold text-ink">
-            {selectedChild.firstName} · {selectedChild.age}
+            {profileName(selectedProfile)}
+            {!selectedProfile.isMe && ` · ${selectedProfile.age}`}
           </span>
         </span>
         <ChevronsUpDown className="size-4 shrink-0 text-slate-600" aria-hidden="true" />
@@ -75,14 +77,14 @@ export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align =
     ),
     button: (
       <>
-        <span>Switch child</span>
+        <span>Switch profile</span>
         <ChevronDown className="size-4 text-slate-600" aria-hidden="true" />
       </>
     ),
     chip: (
       <>
-        <Avatar initials={selectedChild.initials} tone={selectedChild.tone} size="xs" />
-        <span>{selectedChild.firstName}</span>
+        <Avatar initials={selectedProfile.initials} tone={selectedProfile.tone} size="xs" />
+        <span>{selectedProfile.isMe ? 'Me' : selectedProfile.firstName}</span>
         <ChevronDown className="size-4 text-slate-600" aria-hidden="true" />
       </>
     ),
@@ -96,7 +98,7 @@ export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align =
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label={variant === 'sidebar' ? undefined : `Switch child. Viewing ${selectedChild.firstName}`}
+        aria-label={variant === 'sidebar' ? undefined : `Switch profile. Viewing ${selectedProfile.isMe ? 'your own records' : selectedProfile.firstName}`}
         onClick={() => setOpen((v) => !v)}
         className={cx(
           'flex items-center gap-2.5 transition-colors',
@@ -112,7 +114,7 @@ export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align =
         <div
           id={menuId}
           role="menu"
-          aria-label="Choose a child"
+          aria-label="Choose a profile"
           onKeyDown={onMenuKeyDown}
           className={cx(
             'animate-fade-in absolute z-40 mt-2 w-64 rounded-xl border border-line bg-white p-1.5 shadow-pop',
@@ -120,11 +122,11 @@ export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align =
             variant === 'sidebar' && 'w-full',
           )}
         >
-          {childList.map((child, index) => {
-            const selected = child.id === selectedChild.id
+          {profiles.map((profile, index) => {
+            const selected = profile.id === selectedProfile.id
             return (
               <button
-                key={child.id}
+                key={profile.id}
                 ref={(el) => {
                   itemRefs.current[index] = el
                 }}
@@ -132,13 +134,13 @@ export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align =
                 role="menuitemradio"
                 aria-checked={selected}
                 tabIndex={-1}
-                onClick={() => choose(child.id)}
+                onClick={() => choose(profile.id)}
                 className={cx('flex min-h-12 w-full items-center gap-3 rounded-lg px-2.5 text-left hover:bg-[#F4F3F0]', selected && 'bg-teal-50')}
               >
-                <Avatar initials={child.initials} tone={child.tone} size="sm" />
+                <Avatar initials={profile.initials} tone={profile.tone} size="sm" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold text-ink">{child.fullName}</span>
-                  <span className="block text-small text-muted">{child.age}</span>
+                  <span className="block truncate text-[14px] font-semibold text-ink">{profile.isMe ? `Me · ${profile.firstName}` : profile.fullName}</span>
+                  <span className="block text-small text-muted">{profileDetail(profile)}</span>
                 </span>
                 {selected && <Check className="size-4 text-teal-700" aria-hidden="true" />}
               </button>
@@ -147,7 +149,7 @@ export default function ChildSwitcher({ variant = 'sidebar', onNavigate, align =
           <div className="my-1 border-t border-line" />
           <Link
             ref={(el) => {
-              itemRefs.current[childList.length] = el
+              itemRefs.current[profiles.length] = el
             }}
             to="/family/children/new"
             role="menuitem"

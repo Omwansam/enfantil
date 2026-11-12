@@ -65,7 +65,7 @@ function DoseContent({ dose, child, series, sameVisit }) {
   const askCareTeam = async () => {
     setAsking(true)
     try {
-      const clinicianId = appt?.clinicianId ?? child.mainClinicianId ?? 'kl4-reception'
+      const clinicianId = appt?.clinicianId ?? child.mainClinicianId ?? 'tfh-reception'
       const { id } = await openConversationWith({ clinicianId, childId: child.id })
       navigate(`/family/messages/${id}`)
     } catch {
@@ -187,8 +187,8 @@ function DoseContent({ dose, child, series, sameVisit }) {
                 <>
                   <p className="mt-2 text-[16px] font-semibold text-ink">No appointment yet</p>
                   <p className="mt-1 text-[14px] text-slate-600">Your clinic will book it closer to the due date, or you can ask for one now.</p>
-                  <Button to={`/family/visits/new?child=${child.id}&reason=vaccination`} variant="secondary" className="mt-3">
-                    Request appointment
+                  <Button to={`/family/visits/new?for=${child.id}&type=vaccination`} variant="secondary" className="mt-3">
+                    Book appointment
                   </Button>
                 </>
               )}

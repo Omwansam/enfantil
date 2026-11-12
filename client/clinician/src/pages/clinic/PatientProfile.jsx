@@ -1,7 +1,8 @@
-import { CalendarDays, MessageCircle, Phone, Pill, Syringe, TriangleAlert } from 'lucide-react'
+import { CalendarDays, MessageCircle, Pencil, Phone, Pill, Plus, Syringe, Trash2, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { openConversationWithCaregiver } from '../../api/messages'
+import { deleteMeasurement, getMeasurements, saveMeasurement, validateMeasurement } from '../../api/growth'
 import { getPatient } from '../../api/patients'
 import AsyncContent from '../../components/AsyncContent'
 import Avatar from '../../components/Avatar'
@@ -10,13 +11,19 @@ import Breadcrumb from '../../components/Breadcrumb'
 import Button from '../../components/Button'
 import Card from '../../components/Card'
 import DataTable, { Td, Th } from '../../components/DataTable'
+import EditRecordPanel from '../../components/EditRecordPanel'
 import EmptyState from '../../components/EmptyState'
+import GrowthChart from '../../components/GrowthChart'
+import Input from '../../components/Input'
+import Modal from '../../components/Modal'
+import SegmentedControl from '../../components/SegmentedControl'
 import Skeleton, { SkeletonCard, SkeletonTable } from '../../components/Skeleton'
+import { useAuth } from '../../context/AuthContext'
 import { useAsync } from '../../hooks/useAsync'
 import { useDataVersion } from '../../hooks/useDataVersion'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { cx } from '../../utils/cx'
-import { formatDate, formatSlot, formatTime, isSameDay, relativeDay, TODAY } from '../../utils/dates'
+import { formatDate, formatSlot, formatTime, isSameDay, relativeDay, TODAY, TODAY_ISO } from '../../utils/dates'
 import { pluralize, telHref } from '../../utils/format'
 
 export default function PatientProfile() {
@@ -60,6 +67,8 @@ function Profile({ p }) {
   const navigate = useNavigate()
   const [opening, setOpening] = useState(false)
   const [messageError, setMessageError] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [saved, setSaved] = useState(null)
 
   const messageCaregiver = async () => {
     setOpening(true)
@@ -76,6 +85,11 @@ function Profile({ p }) {
   const m = p.lastMeasurement
   return (
     <>
+      {saved && (
+        <p role="status" className="mb-4 rounded-xl border border-[#A7F3D0] bg-completed-bg px-4 py-3 text-[14px] text-ink">
+          <strong className="font-semibold text-completed">{saved.summary}.</strong> Saved to the audit trail; the family sees it in their app.
+        </p>
+      )}
       <Card className="flex flex-col gap-5 p-5 sm:p-6 xl:flex-row xl:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-5">
           <span className="hidden sm:block">
@@ -118,6 +132,9 @@ function Profile({ p }) {
           <Button variant="secondary" size="sm" icon={CalendarDays} to={`/clinic/appointments/new?patient=${p.id}`}>
             Book appointment
           </Button>
+          <Button variant="secondary" size="sm" icon={Pencil} onClick={() => setEditing(true)}>
+            Edit record
+          </Button>
           <Button size="sm" icon={Syringe} to={`/clinic/patients/${p.id}/immunizations/new`}>
             Record immunization
           </Button>
@@ -133,6 +150,7 @@ function Profile({ p }) {
         <div className="space-y-5">
           <PlannedDoses p={p} />
           <Administered p={p} />
+          <Growth p={p} />
         </div>
         <aside className="space-y-5" aria-label={`${p.firstName}’s visit, caregivers and allergies`}>
           <NextAppointment p={p} />
@@ -140,6 +158,7 @@ function Profile({ p }) {
           <Allergies p={p} />
         </aside>
       </div>
+      <EditRecordPanel open={editing} onClose={() => setEditing(false)} kind="infant" id={p.id} onSaved={setSaved} />
     </>
   )
 }
@@ -314,6 +333,11 @@ function Caregivers({ p, onMessage }) {
                 {c.relationship}
                 {c.primary && ' · Primary'} · <span className="whitespace-nowrap">{c.phoneLabel}</span>
               </p>
+              {c.motherId && (
+                <Link to={`/clinic/mothers/${c.motherId}`} className="text-[12px] font-semibold text-teal-700 hover:underline">
+                  Open mother’s record
+                </Link>
+              )}
             </div>
             {c.primary && c.hasApp ? (
               <button
@@ -386,5 +410,154 @@ function Allergies({ p }) {
         </dl>
       </div>
     </Card>
+  )
+}
+
+/** D6 — growth chart and editable measurements. */
+function Growth({ p }) {
+  const { user } = useAuth()
+  const version = useDataVersion()
+  const state = useAsync(() => getMeasurements(p.id), [p.id], version)
+  const [metric, setMetric] = useState('weight')
+  const [editing, setEditing] = useState(null)
+  const [deleting, setDeleting] = useState(null)
+  const remove = async (row) => {
+    setDeleting(row.id)
+    try {
+      await deleteMeasurement(row.id)
+    } finally {
+      setDeleting(null)
+    }
+  }
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+        <h2 className="text-h2">Growth</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl
+            label="Chart"
+            value={metric}
+            onChange={setMetric}
+            options={[
+              { value: 'weight', label: 'Weight' },
+              { value: 'height', label: 'Height' },
+            ]}
+          />
+          <Button size="sm" variant="secondary" icon={Plus} onClick={() => setEditing({ date: TODAY_ISO, weightKg: '', heightCm: '', muacCm: '' })}>
+            Add measurement
+          </Button>
+        </div>
+      </div>
+      <AsyncContent
+        state={state}
+        errorTitle="We couldn’t load measurements"
+        skeleton={<SkeletonTable rows={4} cols={4} label="Loading measurements" className="px-5 pb-5" />}
+      >
+        {(rows) =>
+          rows.length === 0 ? (
+            <EmptyState title="No measurements yet" description="Add the first weight and height." />
+          ) : (
+            <>
+              <div className="px-5">
+                <GrowthChart points={rows} metric={metric} />
+              </div>
+              <DataTable caption="Measurements" minWidth={560} className="mt-3 text-[13px] [&_td]:text-[13px]">
+                <thead>
+                  <tr>
+                    <Th>Date</Th>
+                    <Th>Age</Th>
+                    <Th>Weight</Th>
+                    <Th>Height</Th>
+                    <Th>MUAC</Th>
+                    <Th>By</Th>
+                    <Th>
+                      <span className="sr-only">Actions</span>
+                    </Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...rows].reverse().map((r) => (
+                    <tr key={r.id}>
+                      <Td className="whitespace-nowrap">{formatDate(r.date)}</Td>
+                      <Td className="whitespace-nowrap">{r.ageLabel}</Td>
+                      <Td className="font-semibold">{r.weightKg ? `${r.weightKg} kg` : '—'}</Td>
+                      <Td>{r.heightCm ? `${r.heightCm} cm` : '—'}</Td>
+                      <Td>{r.muacCm ? `${r.muacCm} cm` : '—'}</Td>
+                      <Td className="whitespace-nowrap">{r.by}</Td>
+                      <Td className="whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setEditing({ id: r.id, date: r.date, weightKg: r.weightKg ?? '', heightCm: r.heightCm ?? '', muacCm: r.muacCm ?? '' })}
+                          aria-label={`Edit measurement on ${formatDate(r.date)}`}
+                          className="inline-flex size-10 items-center justify-center rounded-lg text-slate-600 hover:bg-[#F1F0EC]"
+                        >
+                          <Pencil className="size-4" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => remove(r)}
+                          disabled={deleting === r.id}
+                          aria-label={`Delete measurement on ${formatDate(r.date)}`}
+                          className="inline-flex size-10 items-center justify-center rounded-lg text-coral-700 hover:bg-coral-50 disabled:opacity-50"
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                        </button>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            </>
+          )
+        }
+      </AsyncContent>
+      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title={editing?.id ? 'Edit measurement' : 'Add measurement'} size="sm">
+        {editing && <MeasurementForm key={editing.id ?? 'new'} initial={editing} p={p} byName={user.name} onDone={() => setEditing(null)} />}
+      </Modal>
+    </Card>
+  )
+}
+
+function MeasurementForm({ initial, p, byName, onDone }) {
+  const [form, setForm] = useState({ ...initial, weightKg: String(initial.weightKg), heightCm: String(initial.heightCm), muacCm: String(initial.muacCm) })
+  const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const save = async (e) => {
+    e.preventDefault()
+    const found = validateMeasurement(form, { dob: p.dob })
+    setErrors(found)
+    if (Object.keys(found).length) return
+    setSaving(true)
+    try {
+      await saveMeasurement(p.id, form, byName)
+      onDone()
+    } catch (err) {
+      setErrors(err.fields ?? { form: err.message })
+      setSaving(false)
+    }
+  }
+  return (
+    <form onSubmit={save} noValidate className="space-y-4">
+      <Input type="date" label="Date" required min={p.dob} max={TODAY_ISO} value={form.date} onChange={set('date')} error={errors.date} />
+      <div className="grid grid-cols-3 gap-3">
+        <Input label="Weight" suffix="kg" inputMode="decimal" value={form.weightKg} onChange={set('weightKg')} error={errors.weightKg} />
+        <Input label="Height" suffix="cm" inputMode="decimal" value={form.heightCm} onChange={set('heightCm')} error={errors.heightCm} />
+        <Input label="MUAC" suffix="cm" inputMode="decimal" value={form.muacCm} onChange={set('muacCm')} error={errors.muacCm} />
+      </div>
+      {errors.form && (
+        <p role="alert" className="text-[14px] text-coral-700">
+          {errors.form}
+        </p>
+      )}
+      <div className="flex justify-end gap-3">
+        <Button variant="neutral" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" loading={saving}>
+          Save
+        </Button>
+      </div>
+    </form>
   )
 }

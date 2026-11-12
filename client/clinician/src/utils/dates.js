@@ -1,13 +1,10 @@
 /**
- * Date helpers. The demo's "today" is fixed at Monday 9 November 2026, 09:45 so
- * every screen matches the design. Overdue status, days late, ages and the
- * KEPI schedule are calculated against TODAY, never hard-coded.
- *
- * `now()` starts at TODAY and moves forward with real time, so messages you
- * send or drafts you save get sensible timestamps (09:46, 09:47 …).
+ * Date helpers. TODAY is the moment the portal loaded; the API works out
+ * overdue status, days late and the KEPI schedule against the server's
+ * clock, and the screens use TODAY for week views, "today" labels and date
+ * limits. `now()` is the current moment.
  */
-export const TODAY = new Date(2026, 10, 9, 9, 45)
-const BOOTED_AT = Date.now()
+export const TODAY = new Date()
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -16,7 +13,7 @@ const DAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 const DAY_MS = 86_400_000
 
 export function now() {
-  return new Date(TODAY.getTime() + (Date.now() - BOOTED_AT))
+  return new Date()
 }
 
 /** Parses 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:mm' as a local date (no timezone shifts). */

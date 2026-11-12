@@ -98,7 +98,7 @@ export default function SignIn() {
           value={form.identifier}
           onChange={update('identifier')}
           error={errors.identifier}
-          placeholder="KL4-PAED-0000 or name@example.co.ke"
+          placeholder="TFH-PAED-0000 or name@example.co.ke"
         />
         <Input
           id="password"

@@ -1,8 +1,7 @@
-import { CalendarDays, ChartLine, FileText, LayoutDashboard, LogOut, MessageCircle, Users } from 'lucide-react'
+import { Bell, Building2, CalendarClock, CalendarDays, ChartLine, FileText, LayoutDashboard, LogOut, MessageCircle, Users } from 'lucide-react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import Avatar from './Avatar'
 import CountPill from './CountPill'
-import FacilitySwitcher from './FacilitySwitcher'
 import Logo from './Logo'
 import { useAuth } from '../context/AuthContext'
 import { useNavCounts } from '../hooks/useNavCounts'
@@ -37,7 +36,7 @@ function NavItem({ to, icon: Icon, label, count, countTone, countLabel, end, onN
 
 /** Deep-teal portal sidebar: logo, facility, navigation with counts, signed-in clinician. */
 export default function Sidebar({ onNavigate }) {
-  const { user, signOut } = useAuth()
+  const { user, signOut, facility } = useAuth()
   const counts = useNavCounts()
   const navigate = useNavigate()
 
@@ -52,12 +51,27 @@ export default function Sidebar({ onNavigate }) {
         <Logo />
       </NavLink>
 
-      <FacilitySwitcher />
+      <div className="flex items-start gap-2.5 rounded-xl border border-white/15 px-3 py-2.5">
+        <Building2 className="mt-0.5 size-4 shrink-0 text-portal-text" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold text-white">{facility?.name}</p>
+          <p className="truncate text-[12px] text-portal-text">{facility?.department}</p>
+        </div>
+      </div>
 
       <nav aria-label="Main" className="mt-5 flex flex-col gap-1">
         <NavItem to="/clinic" end icon={LayoutDashboard} label="Dashboard" onNavigate={onNavigate} />
         <NavItem to="/clinic/patients" icon={Users} label="Patients" onNavigate={onNavigate} />
         <NavItem to="/clinic/appointments" icon={CalendarDays} label="Appointments" onNavigate={onNavigate} />
+        <NavItem
+          to="/clinic/requests"
+          icon={CalendarClock}
+          label="Requests"
+          count={counts.requests}
+          countTone="amber"
+          countLabel="pending"
+          onNavigate={onNavigate}
+        />
         <NavItem
           to="/clinic/messages"
           icon={MessageCircle}
@@ -77,6 +91,15 @@ export default function Sidebar({ onNavigate }) {
           onNavigate={onNavigate}
         />
         <NavItem to="/clinic/coverage" icon={ChartLine} label="Coverage" onNavigate={onNavigate} />
+        <NavItem
+          to="/clinic/notifications"
+          icon={Bell}
+          label="Notifications"
+          count={counts.notifications}
+          countTone="coral"
+          countLabel="unread"
+          onNavigate={onNavigate}
+        />
       </nav>
 
       <div className="mt-auto flex items-center gap-3 border-t border-white/12 px-2 pt-4">

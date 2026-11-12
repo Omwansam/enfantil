@@ -1,42 +1,19 @@
-import { request } from './client'
-import { byDateDesc, childSummary } from './helpers'
+/** Notifications and the sidebar unread counts. */
+import { get, post, seg } from './client'
 
 export function getNotifications() {
-  return request((db) =>
-    [...db.notifications].sort(byDateDesc('createdAt')).map((n) => ({ ...n, child: childSummary(db, n.childId) })),
-  )
+  return get('/notifications')
 }
 
 export function markNotificationRead(id) {
-  return request(
-    (db) => {
-      const n = db.notifications.find((x) => x.id === id)
-      if (n) n.read = true
-      return { ok: true }
-    },
-    { mutates: true, delay: 100 },
-  )
+  return post(`/notifications/${seg(id)}/read`)
 }
 
 export function markAllNotificationsRead() {
-  return request(
-    (db) => {
-      db.notifications.forEach((n) => {
-        n.read = true
-      })
-      return { ok: true }
-    },
-    { mutates: true },
-  )
+  return post('/notifications/read-all')
 }
 
 /** Unread counts for the sidebar badges. */
 export function getUnreadCounts() {
-  return request(
-    (db) => ({
-      messages: db.conversations.filter((c) => c.messages.some((m) => m.from === 'clinician' && !m.read)).length,
-      notifications: db.notifications.filter((n) => !n.read).length,
-    }),
-    { delay: 80 },
-  )
+  return get('/notifications/unread-counts')
 }

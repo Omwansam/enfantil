@@ -24,6 +24,7 @@ import { formatLocalPhone, joinNames } from '../utils/format'
 const TABS = [
   { value: 'all', label: 'All' },
   { value: 'unread', label: 'Unread' },
+  { value: 'me', label: 'My care' },
   { value: 'vaccines', label: 'Vaccines' },
   { value: 'visits', label: 'Visits' },
   { value: 'messages', label: 'Messages' },
@@ -32,8 +33,9 @@ const TABS = [
 const FILTERS = {
   all: () => true,
   unread: (n) => !n.read,
-  vaccines: (n) => n.type === 'vaccine' || n.type === 'overdue',
-  visits: (n) => n.type === 'appointment',
+  me: (n) => n.childId === 'me',
+  vaccines: (n) => ['vaccine', 'overdue', 'maternal-vaccine'].includes(n.type),
+  visits: (n) => ['appointment', 'antenatal', 'postnatal'].includes(n.type) || n.type.startsWith('request-'),
   messages: (n) => n.type === 'message',
 }
 
@@ -43,6 +45,13 @@ const TYPE_TILES = {
   overdue: { text: '!', label: 'Overdue', className: 'bg-coral-50 text-coral-700' },
   appointment: { text: 'CAL', label: 'Visit', className: 'bg-upcoming-bg text-upcoming' },
   growth: { text: 'KG', label: 'Growth', className: 'bg-completed-bg text-completed' },
+  antenatal: { text: 'ANC', label: 'Antenatal reminder', className: 'bg-[#FCE7F3] text-[#9D174D]' },
+  postnatal: { text: 'PNC', label: 'Postnatal reminder', className: 'bg-[#FCE7F3] text-[#9D174D]' },
+  'maternal-vaccine': { text: 'Td', label: 'Maternal vaccine', className: 'bg-teal-50 text-teal-700' },
+  'request-confirmed': { text: 'OK', label: 'Request confirmed', className: 'bg-completed-bg text-completed' },
+  'request-proposed': { text: 'NEW', label: 'New time proposed', className: 'bg-planned-bg text-planned' },
+  'request-declined': { text: 'NO', label: 'Request declined', className: 'bg-cancelled-bg text-cancelled' },
+  record: { text: 'REC', label: 'Record updated', className: 'bg-[#EEF2FF] text-[#3730A3]' },
 }
 
 function targetUrl(n) {
@@ -51,6 +60,7 @@ function targetUrl(n) {
   if (t.doseId) return `/family/vaccines/${t.doseId}`
   if (t.appointmentId) return `/family/visits?visit=${t.appointmentId}`
   if (t.page === 'health') return '/family/health'
+  if (t.page) return `/family/${t.page}`
   return '/family'
 }
 
@@ -80,7 +90,7 @@ export default function Notifications() {
     <>
       <PageHeader
         title="Notifications"
-        subtitle={childList.length ? `Reminders and updates for ${joinNames(childList.map((c) => c.firstName))}` : undefined}
+        subtitle={`Reminders and updates for ${joinNames(['you', ...childList.map((c) => c.firstName)])}`}
         actions={
           <Button variant="secondary" onClick={markAll} loading={marking} disabled={!unreadCount}>
             Mark all as read
@@ -127,7 +137,7 @@ export default function Notifications() {
                             <span className={cx('block text-[15px] text-ink', n.read ? 'font-medium' : 'font-semibold')}>{n.title}</span>
                             <span className="mt-0.5 block text-[14px] text-slate-600">{n.body}</span>
                             <span className="mt-1 block text-small text-muted">
-                              {n.child?.firstName} · {formatFeedTime(n.createdAt)}
+                              {n.child?.isMe ? 'You' : n.child?.firstName} · {formatFeedTime(n.createdAt)}
                             </span>
                           </span>
                           {!n.read && <UnreadDot className="mt-2" label="" />}
@@ -182,7 +192,7 @@ export default function Notifications() {
                     {rel === 'Today' || rel === 'Tomorrow' ? rel : `Next visit · ${formatDate(next.start, 'weekday')}`}
                   </h2>
                   <p className="mt-1 text-[15px] leading-6 text-teal-50">
-                    {next.child.firstName} · {next.title.replace(' + ', ' and ')} at {formatTime(next.start)}, {next.facility.name}.
+                    {next.child.isMe ? 'You' : next.child.firstName} · {next.title.replace(' + ', ' and ')} at {formatTime(next.start)}, {next.facility.name}.
                   </p>
                   <Button to={`/family/visits?visit=${next.id}`} variant="white" className="mt-4">
                     View visit

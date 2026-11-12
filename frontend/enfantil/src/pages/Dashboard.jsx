@@ -14,6 +14,7 @@ import DateTile from '../components/DateTile'
 import EmptyState from '../components/EmptyState'
 import PageHeader from '../components/PageHeader'
 import RequireChild from '../components/RequireChild'
+import MeOverview from './me/MeOverview'
 import Skeleton, { SkeletonList } from '../components/Skeleton'
 import { linkClass } from '../components/fieldStyles'
 import { useAuth } from '../context/AuthContext'
@@ -30,7 +31,7 @@ const num = (value) => String(Number(value))
 export default function Dashboard() {
   useDocumentTitle('Overview')
   const { user } = useAuth()
-  const { childList, selectedChild, selectChild } = useChildren()
+  const { profiles, selectedProfile, selectChild, isMe } = useChildren()
   const location = useLocation()
   const navigate = useNavigate()
   const flash = location.state?.flash
@@ -41,9 +42,9 @@ export default function Dashboard() {
         eyebrow={formatDate(TODAY, 'long')}
         title={`Habari, ${user?.firstName ?? ''}`}
         actions={
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Choose a child">
-            {childList.map((child) => {
-              const active = child.id === selectedChild?.id
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Choose whose overview to see">
+            {profiles.map((child) => {
+              const active = child.id === selectedProfile?.id
               return (
                 <button
                   key={child.id}
@@ -56,8 +57,8 @@ export default function Dashboard() {
                   )}
                 >
                   <Avatar initials={child.initials} tone={child.tone} size="sm" />
-                  <span className="font-semibold text-ink">{child.firstName}</span>
-                  <span className="text-muted">· {child.ageShort}</span>
+                  <span className="font-semibold text-ink">{child.isMe ? `Me · ${child.firstName}` : child.firstName}</span>
+                  {!child.isMe && <span className="text-muted">· {child.ageShort}</span>}
                 </button>
               )
             })}
@@ -74,7 +75,7 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      <RequireChild>{(child) => <Overview child={child} />}</RequireChild>
+      {isMe ? <MeOverview /> : <RequireChild>{(child) => <Overview child={child} />}</RequireChild>}
     </>
   )
 }
@@ -123,8 +124,8 @@ function Overview({ child }) {
                 <EmptyState
                   icon={CalendarDays}
                   title="Nothing booked yet"
-                  description="When your clinic books a visit for any of your children, it will show here."
-                  action={<Button to="/family/visits/new">Request appointment</Button>}
+                  description="When the hospital books a visit for you or your children, it shows here."
+                  action={<Button to="/family/visits/new">Book appointment</Button>}
                 />
               }
             >
@@ -132,20 +133,20 @@ function Overview({ child }) {
                 <ul className="divide-y divide-line">
                   {list.slice(0, 5).map((appt, index) => {
                     const rel = relativeDay(appt.start)
-                    const status = appt.displayStatus === 'Requested' ? 'Requested' : rel === 'Today' || rel === 'Tomorrow' ? rel : 'Upcoming'
+                    const status = appt.displayStatus === 'Pending' ? 'Pending' : rel === 'Today' || rel === 'Tomorrow' ? rel : 'Upcoming'
                     return (
                       <li key={appt.id}>
                         <Link
                           to={`/family/visits?visit=${appt.id}`}
                           className="-mx-2 flex items-center gap-4 rounded-xl px-2 py-3.5 transition-colors hover:bg-[#FAFAF8]"
                         >
-                          <DateTile date={appt.start} variant={index === 0 ? 'solid' : appt.child.tone === 'coral' ? 'coral' : 'teal'} />
+                          <DateTile date={appt.start} variant={index === 0 ? 'solid' : appt.childId === 'me' ? 'coral' : 'teal'} />
                           <span className="min-w-0 flex-1">
                             <StatusBadge status={status} className="mb-1 sm:hidden" />
                             <span className="block text-[15px] font-semibold text-ink">{appt.title}</span>
                             <span className="block text-[14px] text-slate-600">
-                              {appt.child.firstName} · {formatTime(appt.start)}
-                              {appt.clinician && ` · ${appt.clinician.name}`} · {appt.facility.name}
+                              {appt.child.isMe ? 'You' : appt.child.firstName} · {formatTime(appt.start)}
+                              {appt.clinician && ` · ${appt.clinician.name}`}
                             </span>
                           </span>
                           <span className="hidden sm:block">
@@ -177,7 +178,7 @@ function Overview({ child }) {
                 errorTitle="We couldn’t load messages"
                 skeleton={<SkeletonList rows={3} label="Loading messages" className="-mx-5" />}
                 isEmpty={(list) => list.length === 0}
-                empty={<EmptyState icon={MessageCircle} title="No messages yet" description="Messages from your children’s care team will show here." />}
+                empty={<EmptyState icon={MessageCircle} title="No messages yet" description="Messages from your care team will show here." />}
               >
                 {(list) => (
                   <ul className="divide-y divide-line">
@@ -312,15 +313,14 @@ function SummaryCards({ child, data }) {
               </Link>
             </h2>
             <p className="mt-1 text-[14px] text-slate-600">
-              {nextVisit.clinician ? `${nextVisit.clinician.name} · ` : ''}
-              {nextVisit.facility.shortName}
+              {nextVisit.clinician ? nextVisit.clinician.name : 'Tumaini Family Hospital'}
             </p>
           </>
         ) : (
           <div className="mt-2">
             <p className="text-[16px] font-semibold text-ink">No visit booked</p>
-            <Link to="/family/visits/new" className={`${linkClass} relative mt-1 inline-flex min-h-11 items-center text-[14px]`}>
-              Request appointment
+            <Link to={`/family/visits/new?for=${child.id}`} className={`${linkClass} relative mt-1 inline-flex min-h-11 items-center text-[14px]`}>
+              Book appointment
             </Link>
           </div>
         )}

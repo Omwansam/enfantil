@@ -61,6 +61,13 @@ async function start() {
   const server = app.listen(config.PORT, () => {
     console.log(`Enfantil API on http://localhost:${config.PORT}  (family: /api/family, portal: /api/clinic)`)
   })
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${config.PORT} is already in use. Stop the other program, or set PORT in backend/.env (and VITE_API_URL in both frontends).`)
+      process.exit(1)
+    }
+    throw err
+  })
   const shutdown = (signal) => {
     console.log(`${signal} received, shutting down…`)
     server.close(async () => {

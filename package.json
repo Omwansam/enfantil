@@ -1,0 +1,19 @@
+{
+  "name": "enfantil",
+  "private": true,
+  "description": "Enfantil — Infant and Maternal Health Management System: API (backend), family app (frontend/enfantil) and clinician portal (client/clinician).",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend/enfantil && npm install --prefix client/clinician",
+    "setup": "npm install && npm run install:all && npm run setup --prefix backend",
+    "dev": "concurrently --names api,family,portal --prefix-colors blue,green,magenta --kill-others-on-fail \"npm run dev --prefix backend\" \"npm run dev --prefix frontend/enfantil\" \"npm run dev --prefix client/clinician\"",
+    "seed": "npm run db:seed --prefix backend",
+    "build": "npm run build --prefix frontend/enfantil && npm run build --prefix client/clinician",
+    "test": "npm test --prefix backend"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
